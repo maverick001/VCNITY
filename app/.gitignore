@@ -1,0 +1,12 @@
+.env
+.venv/
+.web/
+__pycache__/
+*.pyc
+.pytest_cache/
+cache/
+*.log
+ui/.web/
+ui/.states/
+ui/assets/external/
+uv.lock
