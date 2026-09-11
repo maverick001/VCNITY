@@ -32,6 +32,11 @@ class AppState(rx.State):
     # intake
     files: list[dict[str, Any]] = []
     wordlist_text: str = ""
+    upload_level: str = "2"
+    upload_consent_label: str = ""
+    upload_consent_scope: str = ""
+    uploading: bool = False
+    upload_error: str = ""
 
     # transcript
     audio_files: list[dict[str, Any]] = []
@@ -345,6 +350,63 @@ class AppState(rx.State):
     def save_wordlist(self):
         if self._api(api.put, "/wordlist", {"text": self.wordlist_text}) is not None:
             self._say("Word list saved. Re-run stage 2 to use it.", "ok")
+
+    def set_upload_level(self, v: str):
+        self.upload_level = v
+
+    def set_upload_consent_label(self, v: str):
+        self.upload_consent_label = v
+
+    def set_upload_consent_scope(self, v: str):
+        self.upload_consent_scope = v
+
+    async def handle_upload(self, files: list[rx.UploadFile]):
+        """Facilitator uploads audio, images, or office documents onto the job.
+        Every file still needs a consent record and a level before it counts as
+        intake (PRD §4 stage 0) — that's enforced by the API, not just this form.
+        """
+        # This handler is an async generator (it yields further down), so every
+        # early-return branch must yield too — otherwise Reflex never flushes
+        # that state change to the browser and the page looks like nothing happened.
+        if self.role != "facilitator":
+            self._say("Only a facilitator uploads files (PRD §3). Switch role at the top.", "error")
+            yield
+            return
+        if not self.job_id:
+            self._say("Create a job first.", "error")
+            yield
+            return
+        if not self.upload_consent_label.strip():
+            self.upload_error = "A consent record needs a label — who or what session this covers."
+            yield
+            return
+        self.upload_error = ""
+        self.uploading = True
+        yield
+        ok, failed = 0, []
+        for f in files:
+            content = await f.read()
+            try:
+                api.upload_file(
+                    f"/jobs/{self.job_id}/files", filename=f.filename or "upload", content=content,
+                    level=int(self.upload_level), consent_label=self.upload_consent_label,
+                    consent_scope=self.upload_consent_scope,
+                )
+                ok += 1
+            except ApiError as e:
+                failed.append(f"{f.filename}: {e.message}")
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"{f.filename}: {e}")
+        self.uploading = False
+        if ok and not failed:
+            self._say(f"Uploaded {ok} file(s) at Level {self.upload_level}. "
+                      "A community reviewer still needs to confirm before AI runs on them.", "ok")
+        elif ok:
+            self._say(f"Uploaded {ok} file(s); {len(failed)} failed: " + "; ".join(failed), "error")
+        else:
+            self._say("Upload failed: " + "; ".join(failed), "error")
+        self.refresh()
+        yield rx.clear_selected_files("facilitator_upload")
 
     # ---------- pipeline ----------
 

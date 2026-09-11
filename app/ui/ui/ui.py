@@ -149,6 +149,54 @@ def file_row(f) -> rx.Component:
     )
 
 
+UPLOAD_ACCEPT = {
+    "audio/*": [".m4a", ".wav", ".mp3", ".mp4", ".aac", ".flac"],
+    "image/*": [".jpg", ".jpeg", ".png", ".heic", ".webp"],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+    "text/plain": [".txt", ".md"],
+}
+
+
+def upload_card() -> rx.Component:
+    return rx.card(
+        rx.heading("Upload a file", size="3"),
+        rx.text("Audio, photos, PowerPoint, Word, or Excel. Every file needs a consent label and a sensitivity "
+                "level before it can be used — set them below, then drop the file.", size="1", color="gray"),
+        rx.upload.root(
+            rx.vstack(
+                rx.icon("upload", size=24),
+                rx.text("Drag a file here, or click to choose one", size="2"),
+                rx.foreach(rx.selected_files("facilitator_upload"),
+                          lambda f: rx.badge(f, size="1", margin_top="4px")),
+                align="center", spacing="1", padding="16px"),
+            id="facilitator_upload",
+            accept=UPLOAD_ACCEPT,
+            max_files=5,
+            border="1px dashed var(--gray-7)", border_radius="8px", width="100%"),
+        rx.hstack(
+            rx.vstack(rx.text("Sensitivity level", size="1", color="gray"),
+                      rx.select(["1", "2", "3"], value=AppState.upload_level, on_change=AppState.set_upload_level),
+                      spacing="1", align="start"),
+            rx.vstack(rx.text("Consent label (required)", size="1", color="gray"),
+                      rx.input(value=AppState.upload_consent_label, on_change=AppState.set_upload_consent_label,
+                              placeholder="e.g. session-consent-2026-09-03", width="220px"),
+                      spacing="1", align="start"),
+            rx.vstack(rx.text("Consent scope (optional)", size="1", color="gray"),
+                      rx.input(value=AppState.upload_consent_scope, on_change=AppState.set_upload_consent_scope,
+                              placeholder="what was agreed to", width="220px"),
+                      spacing="1", align="start"),
+            spacing="4", wrap="wrap", align="end"),
+        rx.cond(AppState.upload_error != "",
+                rx.callout(AppState.upload_error, icon="triangle-alert", color_scheme="red", size="1"),
+                rx.fragment()),
+        rx.button(rx.cond(AppState.uploading, "Uploading…", "Upload"),
+                  on_click=AppState.handle_upload(rx.upload_files(upload_id="facilitator_upload")),
+                  disabled=AppState.uploading, size="2"),
+        spacing="3", align="start", width="100%")
+
+
 def intake_page() -> rx.Component:
     return page(
         "0 · Intake",
@@ -168,6 +216,7 @@ def intake_page() -> rx.Component:
                         rx.table.column_header_cell("Consent"))),
                     rx.table.body(rx.foreach(AppState.files, file_row)),
                     width="100%")),
+        rx.cond((AppState.role == "facilitator") & (AppState.job_id != 0), upload_card(), rx.fragment()),
         rx.card(
             rx.heading("Brief", size="3"),
             rx.text(AppState.job_brief, white_space="pre-wrap", size="2"),
