@@ -13,5 +13,5 @@ class HostedStub:
     is_local = False
     model = "none"
 
-    def complete(self, prompt, system="", images=None, json_mode=False) -> str:
+    def complete(self, prompt, system="", images=None, json_mode=False, max_tokens=2000) -> str:
         raise HostedRefused("no hosted provider is configured (PRD A7 — no agreement in place)")

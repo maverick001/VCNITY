@@ -26,6 +26,8 @@ class GateError(PermissionError):
 
 
 def _stage2(session, job_id, **opts):
+    if opts.get("only_diarise"):
+        return {"diarisation": s2b_diarise.run(session, job_id, files=opts.get("files"))}
     out = s2_transcribe.run(session, job_id, **{k: v for k, v in opts.items() if k in ("variants", "files")})
     if opts.get("diarise", True):
         out["diarisation"] = s2b_diarise.run(session, job_id, files=opts.get("files"))
@@ -112,7 +114,7 @@ def status(session, job_id: int) -> dict:
     waiting_l2 = [f.filename for f in files if f.level == 2 and not f.level_confirmed_by_community]
     stages = [
         {"n": 0, "done": bool(files) and all(f.consent_id for f in files)},
-        {"n": 1, "done": bool(files) and len(ingested) == len([f for f in files if f.kind != "brief"]) + 0},
+        {"n": 1, "done": bool(files) and len(ingested) == len(files)},
         {"n": 2, "done": segs > 0},
         {"n": 3, "done": arts > 0},
         {"n": 4, "done": bool(themes)},

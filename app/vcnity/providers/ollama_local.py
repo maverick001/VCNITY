@@ -14,7 +14,7 @@ class OllamaProvider(Provider):
         self.name = f"ollama:{model}"
         self._host = host
 
-    def complete(self, prompt, system="", images=None, json_mode=False) -> str:
+    def complete(self, prompt, system="", images=None, json_mode=False, max_tokens=2000) -> str:
         import ollama
 
         client = ollama.Client(host=self._host) if self._host else ollama.Client()
@@ -25,7 +25,10 @@ class OllamaProvider(Provider):
         if images:
             user["images"] = [str(Path(p)) for p in images]
         messages.append(user)
-        kwargs = {"model": self.model, "messages": messages, "options": {"temperature": 0}}
+        # num_predict caps runaway generation; repeat_penalty discourages the
+        # "- -\n- -\n…" loop a vision model falls into on unreadable handwriting.
+        options = {"temperature": 0, "num_predict": int(max_tokens), "repeat_penalty": 1.15}
+        kwargs = {"model": self.model, "messages": messages, "options": options}
         if json_mode:
             kwargs["format"] = "json"
         try:

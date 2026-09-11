@@ -55,9 +55,10 @@ def call(
     images: list[Path] | None = None,
     json_mode: bool = False,
     redacted: bool = False,
+    max_tokens: int = 2000,
 ) -> str:
     provider = get_provider(level, redacted=redacted)
-    out = provider.complete(prompt, system=system, images=images, json_mode=json_mode)
+    out = provider.complete(prompt, system=system, images=images, json_mode=json_mode, max_tokens=max_tokens)
     record_call(
         session,
         job_id=job_id,

@@ -19,4 +19,5 @@ class Provider(ABC):
         system: str = "",
         images: list[Path] | None = None,
         json_mode: bool = False,
+        max_tokens: int = 2000,
     ) -> str: ...

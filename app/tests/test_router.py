@@ -12,7 +12,7 @@ class Fake(Provider):
     is_local = True
     model = "fake-model"
 
-    def complete(self, prompt, system="", images=None, json_mode=False):
+    def complete(self, prompt, system="", images=None, json_mode=False, max_tokens=2000):
         return "ok"
 
 

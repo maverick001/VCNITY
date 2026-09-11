@@ -16,6 +16,22 @@ def test_parse_vlm():
 def test_parse_vlm_without_description_line():
     out = s3_artefacts.parse_vlm("only words here")
     assert out["verbatim_text"] == "only words here" and out["description"] == ""
+    assert out["degenerate"] is False
+
+
+def test_parse_vlm_collapses_runaway_repetition():
+    raw = "height:\nEmployer\n" + "- -\n" * 300 + "- me\n" + "DESCRIPTION: paper on a wall."
+    out = s3_artefacts.parse_vlm(raw)
+    assert out["degenerate"] is True
+    assert out["verbatim_text"].splitlines()[:2] == ["height:", "Employer"]
+    assert "- -" not in out["verbatim_text"]
+    assert out["verbatim_text"].endswith("[illegible]") and out["illegible_count"] == 1
+    assert out["description"].startswith("[model output repeated itself")
+
+
+def test_parse_vlm_collapses_consecutive_duplicate_words():
+    out = s3_artefacts.parse_vlm("HOPE\nHOPE\nHOPE\nHOPE\nHOPE\nHOPE\nfive\nDESCRIPTION: x")
+    assert out["verbatim_text"].startswith("HOPE\nfive") and out["degenerate"] is True
 
 
 def test_run_uses_router_and_skips_level3(db_session, monkeypatch, tmp_path):
