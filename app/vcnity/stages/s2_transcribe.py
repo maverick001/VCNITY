@@ -19,7 +19,11 @@ from ..models import Job, Segment, SourceFile
 from ..wordlist import as_hotwords, load_wordlist
 from ._gate import ai_allowed, why_not
 
-ASR_MODEL = "large-v3"
+import os
+
+# large-v3 is the recommendation for accented, code-switched, far-field audio.
+# large-v3-turbo is ~4x faster and ~1 GB smaller if the laptop is short of RAM.
+ASR_MODEL = os.environ.get("VCNITY_ASR_MODEL", "large-v3")
 UNSURE_LOGPROB = -0.8
 UNSURE_NO_SPEECH = 0.6
 
@@ -54,7 +58,6 @@ def transcribe_wav(wav: Path, hotwords: str | None = None, initial_prompt: str |
         compression_ratio_threshold=2.4,
         log_prob_threshold=-1.0,
         no_speech_threshold=0.6,
-        word_timestamps=True,
         hotwords=hotwords or None,
         initial_prompt=initial_prompt or None,
     )
@@ -67,12 +70,19 @@ def transcribe_wav(wav: Path, hotwords: str | None = None, initial_prompt: str |
     return out
 
 
-def run(session, job_id: int, variants=("with_wordlist", "without"), files: list[int] | None = None) -> dict:
+def run(session, job_id: int, variants=("with_wordlist", "without"), files: list[int] | None = None,
+        force: bool = False) -> dict:
+    """Transcribe each allowed recording, once per variant.
+
+    Commits after every file/variant and skips any that already have segments,
+    so a run that gets killed part-way (this is a laptop) resumes where it
+    stopped instead of starting over. `force=True` re-does everything.
+    """
     words = load_wordlist(settings.wordlist_path)
     hot = as_hotwords(words)
     prompt = ("A community co-design session in Queensland, Australia. "
               f"Names and places that may come up: {hot}.") if words else None
-    report: dict = {"files": []}
+    report: dict = {"files": [], "model": ASR_MODEL}
     q = session.query(SourceFile).filter_by(job_id=job_id, kind="audio")
     if files:
         q = q.filter(SourceFile.id.in_(files))
@@ -87,9 +97,13 @@ def run(session, job_id: int, variants=("with_wordlist", "without"), files: list
             entry["skipped"] = "not ingested yet (run stage 1)"
             report["files"].append(entry)
             continue
-        session.query(Segment).filter(Segment.file_id == sf.id, Segment.variant.in_(variants)).delete(
-            synchronize_session=False)
         for variant in variants:
+            existing = session.query(Segment).filter_by(file_id=sf.id, variant=variant).count()
+            if existing and not force:
+                entry[variant] = f"{existing} (already done)"
+                continue
+            if existing:
+                session.query(Segment).filter_by(file_id=sf.id, variant=variant).delete(synchronize_session=False)
             use_words = variant == "with_wordlist"
             segs = transcribe_wav(wav, hotwords=hot if use_words else None,
                                   initial_prompt=prompt if use_words else None)
@@ -101,6 +115,7 @@ def run(session, job_id: int, variants=("with_wordlist", "without"), files: list
             record_call(session, job_id=job_id, stage=2, provider=f"faster-whisper:{ASR_MODEL}",
                         is_local=True, level=sf.level, model=ASR_MODEL,
                         purpose=f"asr-{variant}" + ("-l2-local-human-check" if sf.level == 2 else ""))
+            session.commit()  # bank this variant now; a kill mid-run keeps it
             entry[variant] = len(segs)
         report["files"].append(entry)
     job = session.get(Job, job_id)
