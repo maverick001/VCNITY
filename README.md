@@ -26,10 +26,10 @@ Most of the working content (`PRD/`, `Document/`, `Docs/`, `Data/`, `Assessment1
 
 - **`PRD/VCNITY_PRD_v0.3.md`** — the live PRD, the working source of truth. `v0.2` sits alongside it as the immediately-prior draft, kept for reference — don't edit it.
 - **`app/`** — the prototype app (see the quickstart above and `app/README.md`).
-- **`PRD/VCNITY-PRD-Clarification-Questions.md`** — numbered open questions for the product owner (the product owner), grouped by topic.
+- **`PRD/VCNITY-PRD-Clarification-Questions.md`** — numbered open questions for the product owner, grouped by topic.
 - **`Document/VCNITY 2026 AI project.pdf`** — the client's pitch deck. Every requirement in the PRD should trace back to a slide in here.
 - **`Document/VCNITY_Technical_Workflow_Proposal_Shafwon.pdf`** — the team's own wider-platform sketch. Not submitted, not committed to — don't treat it as scope.
-- **`Document/`, `Document/QUT WIP Intellectual Property Information.pdf`** — client correspondence and unit IP terms.
+- **`Document/`** — client correspondence and unit IP terms.
 - **`Assessment1/`** — the assessment 1 pitch/proposal deliverables (proposal draft, technical solution sections, pitch deck).
 - **`Data/Raw/`** — raw source material for analysis.
 - **`Docs/superpowers/`** — implementation-plan records for document revisions (e.g. deck-to-PRD alignment history). Worth reading before a large PRD revision.
