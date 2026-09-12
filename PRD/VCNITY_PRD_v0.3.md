@@ -57,9 +57,11 @@ Text also comes in — slides, Word files, plain text — and goes through the s
 
 Note: when the community and the analyst disagree about what material *means*, the community decides — that isn't negotiable. 
 
+Note: for this build, stages 2 and 3 run on local open-source models, not a cloud AI vendor — **faster-whisper-large-v3** for transcription, **qwen3-vl:4b** for image description. Nothing leaves the machine they run on `[A3]`.
+
 Text files skip stages 2 and 3. Stage 1 pulls the words out and they go straight to stage 4. Pictures inside a slide deck go through stage 3 like any photo.
 
-**The sensitivity levels, as we've built them** `[A3]`:
+**The sensitivity levels, as we've built them** `[A4]`:
 
 | Level            | What's in it                                                                            | What's allowed                                                               |
 | ---------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -67,9 +69,9 @@ Text files skip stages 2 and 3. Stage 1 pulls the words out and they go straight
 | **2 Sensitive**  | Personal experience, health and wellbeing, anything tied to a known group               | Only after names and details are stripped out, and a person must check it    |
 | **3 Restricted** | First Nations cultural knowledge, disclosures of harm, anything the community restricts | **No AI at all.** People only, community decides. May never reach the client |
 
-The facilitator sets it on upload. The community can raise it any time. Nothing lowers it automatically. If the facilitator isn't sure, it goes up a level. And nothing above Level 1 goes near AI until someone from the community has confirmed the level `[A4]` — we don't know who that person is on a real job. Level 3 is hand work, and that's what a job costs `[A5]` — we don't know what share of a typical job is Level 3.
+The facilitator sets it on upload. The community can raise it any time. Nothing lowers it automatically. If the facilitator isn't sure, it goes up a level. And nothing above Level 1 goes near AI until someone from the community has confirmed the level `[A5]` — we don't know who that person is on a real job. Level 3 is hand work, and that's what a job costs `[A6]` — we don't know what share of a typical job is Level 3.
 
-"Very few people" in stage 7 means fewer than 3 `[A6]`. The number is a placeholder.
+"Very few people" in stage 7 means fewer than 3 `[A7]`. The number is a placeholder.
 
 ## 5. Benchmark App perforamce
 
@@ -88,11 +90,11 @@ The first measure needs a transcript a person has corrected by hand, for at leas
 
 ## 6. Safety and the law
 
-We assumed the Privacy Act and the CARE principles apply, the data can't leave Australia, and Level 3 is blocked from anything outside `[A7]`. Everything in the prototype runs on one laptop and no material leaves it. That makes the zero in §5 a fact we can show, not a promise.
+We assumed the Privacy Act and the CARE principles apply, the data can't leave Australia, and Level 3 is blocked from anything outside `[A8]`. Everything in the prototype runs on one laptop and no material leaves it. That makes the zero in §5 a fact we can show, not a promise.
 
 ## 7. Text and other material
 
-You've told us to expect slides, Word files and plain text alongside the recordings and photos. Pulling the words out of those needs no AI. What we don't know is whose words they are `[A8]` — a facilitator's notes, something a participant wrote, or your brief to us are three different things. We've treated them all like any other file: they need a consent record and a level at intake, and the brief sits at Level 1.
+You've told us to expect slides, Word files and plain text alongside the recordings and photos. Pulling the words out of those needs no AI. What we don't know is whose words they are `[A9]` — a facilitator's notes, something a participant wrote, or your brief to us are three different things. We've treated them all like any other file: they need a consent record and a level at intake, and the brief sits at Level 1.
 
 **What the sample material taught us.** The three photos we were given are 480 by 360 pixels — copies that went through a messaging app. The big marker words are readable. The small handwriting isn't, and no model can recover what the picture doesn't hold. The recordings are from the back of a room, quiet and noisy. So two capture rules for the pilot: photos come as the original file, not through Messages or WhatsApp; and one phone sits near whoever is speaking. Both are cheaper than anything we can do afterwards.
 
@@ -102,15 +104,15 @@ You sent us four Ipswich City Council engagement projects as reporting examples.
 
 That tells us four things we'd guessed differently, and we'd rather you settled them than we did.
 
-**Which "reporting function" you meant** `[A9]` — slide 11 could mean the report that goes to the client, or a way for someone to raise a concern. Your examples are the first. The prototype has both: the report, and a "raise a concern" button on every screen. Tell us which one is THE MUST.
+**Which "reporting function" you meant** `[A10]` — slide 11 could mean the report that goes to the client, or a way for someone to raise a concern. Your examples are the first. The prototype has both: the report, and a "raise a concern" button on every screen. Tell us which one is THE MUST.
 
-**Quotes** `[A10]` — your examples carry none. Our whole method rests on them: every theme traces to a real quote, and the client researcher in §3 wants "quotes they can cite". We've assumed quotes go to the client. If they don't, they still do their job inside the pipeline as evidence, and the client gets the table.
+**Quotes** `[A11]` — your examples carry none. Our whole method rests on them: every theme traces to a real quote, and the client researcher in §3 wants "quotes they can cite". We've assumed quotes go to the client. If they don't, they still do their job inside the pipeline as evidence, and the client gets the table.
 
-**One person behind a theme** `[A11]` — your examples report "1 of 8 respondents". Our rule in stage 7 drops anything under 3 people. Ours is more careful than your habit. We kept ours.
+**One person behind a theme** `[A12]` — your examples report "1 of 8 respondents". Our rule in stage 7 drops anything under 3 people. Ours is more careful than your habit. We kept ours.
 
-**One set of themes for the job** `[A12]` — the council reuses the same themes across every question and every suburb. The AI finds whatever groups the material falls into. We've assumed the community approves one set of themes for a job, and everything gets sorted into those. That's more work at sign-off and a cleaner report.
+**One set of themes for the job** `[A13]` — the council reuses the same themes across every question and every suburb. The AI finds whatever groups the material falls into. We've assumed the community approves one set of themes for a job, and everything gets sorted into those. That's more work at sign-off and a cleaner report.
 
-**Who gets a concern, and how fast** `[A13]` — the older draft guessed: harm goes to a named person at VCNITY the same business day, everything else to the analyst within five business days. Those are placeholders and they're a promise you make to a community. One ask regardless: a named person who owns harm reports, in post before the first pilot session. Not a role, not a shared inbox.
+**Who gets a concern, and how fast** `[A14]` — the older draft guessed: harm goes to a named person at VCNITY the same business day, everything else to the analyst within five business days. Those are placeholders and they're a promise you make to a community. One ask regardless: a named person who owns harm reports, in post before the first pilot session. Not a role, not a shared inbox.
 
 ## 9. Questions
 
@@ -118,14 +120,15 @@ That tells us four things we'd guessed differently, and we'd rather you settled 
 | --- | ---------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | A1  | Proof of concept, not live with real community data                    | **Severe** — sets the security bar                      |                                                                                                |
 | A2  | We're only building the four things in §2                              | **Severe** — different project                          |                                                                                                |
-| A3  | The three sensitivity levels as written                                | Moderate                                                | Level 3 as written means no AI at all, including our own local model. The prototype enforces that |
-| A4  | Who confirms a level before AI runs                                    | Moderate — it's what makes the §5 zero real             | Prototype: a community reviewer ticks it on the intake screen                                  |
-| A5  | What share of a typical job is Level 3                                 | **Severe** — decides whether the price works            |                                                                                                |
-| A6  | Drop themes with fewer than 3 people behind them                       | Moderate                                                | See A11 — your examples do the opposite                                                        |
-| A7  | Privacy Act and CARE apply                                             | **Severe** — compliance                                 |                                                                                                |
-| A8  | Text files are treated like any other file, brief is Level 1           | Moderate                                                | Whose words are they decides consent                                                           |
-| A9  | "Reporting function" means the client report, and we built a concern button too | **Severe** — it's THE MUST and we're not sure what it is |                                                                               |
-| A10 | Quotes go to the client                                                | Moderate — the table works either way                   | Your examples have none                                                                        |
-| A11 | We drop one-person themes even though your examples report them        | Moderate                                                | Same rule as A6, seen from your side                                                           |
-| A12 | One community-approved set of themes per job                           | Moderate — more sign-off work, cleaner report           |                                                                                                |
-| A13 | Harm reports same day to a named person, everything else in five days  | **Severe** — a promise we shouldn't be inventing        | The named person is the ask                                                                    |
+| A3  | Local open-source models (faster-whisper-large-v3, qwen3-vl:4b) carry stages 2–3 for this build | Moderate — could change §5's accuracy numbers, but keeps Level 3 material off any outside service |                                                                               |
+| A4  | The three sensitivity levels as written                                | Moderate                                                | Level 3 as written means no AI at all, including our own local model. The prototype enforces that |
+| A5  | Who confirms a level before AI runs                                    | Moderate — it's what makes the §5 zero real             | Prototype: a community reviewer ticks it on the intake screen                                  |
+| A6  | What share of a typical job is Level 3                                 | **Severe** — decides whether the price works            |                                                                                                |
+| A7  | Drop themes with fewer than 3 people behind them                       | Moderate                                                | See A12 — your examples do the opposite                                                        |
+| A8  | Privacy Act and CARE apply                                             | **Severe** — compliance                                 |                                                                                                |
+| A9  | Text files are treated like any other file, brief is Level 1           | Moderate                                                | Whose words are they decides consent                                                           |
+| A10 | "Reporting function" means the client report, and we built a concern button too | **Severe** — it's THE MUST and we're not sure what it is |                                                                               |
+| A11 | Quotes go to the client                                                | Moderate — the table works either way                   | Your examples have none                                                                        |
+| A12 | We drop one-person themes even though your examples report them        | Moderate                                                | Same rule as A7, seen from your side                                                           |
+| A13 | One community-approved set of themes per job                           | Moderate — more sign-off work, cleaner report           |                                                                                                |
+| A14 | Harm reports same day to a named person, everything else in five days  | **Severe** — a promise we shouldn't be inventing        | The named person is the ask                                                                    |
