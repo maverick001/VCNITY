@@ -2,7 +2,7 @@
 
 This repo is two things for an IFN735 industry/capstone project: a **Product Requirements Document (PRD)** for VCNITY's 2026 AI project, and a **working prototype** of the pipeline it describes — an AI-assisted analysis pipeline that turns messy Creative Co-Design material (multi-speaker audio, code-switched languages, local slang, photos of handmade artefacts) into policy-ready themes, without letting AI override community authority over meaning.
 
-This README covers both: how to get set up with the PRD files, and how to install and run the prototype app.
+This README orients you to both — the PRD conventions below, and a look at what the prototype does before you follow the link to actually run it.
 
 ## Prototype app — quickstart
 
@@ -10,15 +10,7 @@ The app lives in `app/` and runs the PRD's full ten-stage pipeline (§4) end to 
 
 ![The prototype's Intake page — every file gets a consent record and a sensitivity level before anything runs on it](Image/index_page.jpg)
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com) with `qwen3.5:4b` (text) and `qwen3-vl:4b` (vision) pulled.
-
-```
-git clone <repo-url> && cd <repo>
-cp app/.env.example app/.env      # fill in HF_TOKEN if you want speaker labels
-python app/start.py                # syncs deps, starts Postgres + API + UI
-```
-
-Then open http://localhost:3000. Full setup, the demo script, and what each stage proves: **[`app/README.md`](app/README.md)**. Tests: `uv run --project app pytest app/tests -q`.
+**Install steps, prerequisites, the demo script, and what each stage proves live in one place — [`app/README.md`](app/README.md).** (Kept out of this file so there's a single source of truth instead of two copies to keep in sync.)
 
 ## Getting the files
 
