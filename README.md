@@ -9,24 +9,26 @@ This README covers both: how to install and run the prototype, and how the PRD s
 A runnable proof of concept of the ten-stage pipeline in `PRD/VCNITY_PRD_v0.3.md` §4, on the material in `Data/raw`. Everything runs on one laptop; no material leaves it.
 
 > **Before you run anything, pull these exact models — the app will not work without them:**
+> 
 > ```
 > ollama pull qwen3.5:4b     # required — text: theme labels, evidence checks, reports
 > ollama pull qwen3-vl:4b    # required — vision: reading photos of artefacts
 > ```
+> 
 > These exact tags, not a substitute like `qwen2-vl` or a different size — the app looks up these names literally and Ollama will 404 on anything else.
 
 ![The prototype's Intake page — every file gets a consent record and a sensitivity level before anything runs on it](Image/index_page.jpg)
 
 ### What it proves
 
-| PRD rule | Where it is code | What to show the client |
-|---|---|---|
-| Level 3 never reaches AI — not "outside AI", *any* model | `vcnity/providers/router.py` raises before a provider is chosen; every call logs to `ai_calls` | The audit panel at the top of every page reads **0 · 0**. Raise a photo to Level 3 on the Intake page and watch its quotes vanish from the themes. |
-| The community decides meaning | `vcnity/stages/s6_signoff.py` → `AuthorityError` → API 409 | As *analyst*, press "Try to confirm (will be refused)" on a community-decided theme. |
-| Every theme traces to a real quote | `vcnity/stages/s4_themes.py` — quotes are cluster members; the model only labels | Open any theme's quotes. Stage 5 hides anything whose summary says more than its quotes. |
-| Nothing above Level 1 goes near AI until the community confirms the level | `vcnity/pipeline.py` `GateError` → API 409 | Set a file to Level 2 without confirming, then try to run stage 4. |
-| Analyst cuts need a written reason | `vcnity/stages/s7_identify.py` | Try to cut a flag with an empty reason. |
-| Report leaves only with both approvals | `vcnity/stages/s8_report.py` → 403 | Export is disabled until community *and* analyst approve. |
+| PRD rule                                                                  | Where it is code                                                                               | What to show the client                                                                                                                            |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Level 3 never reaches AI — not "outside AI", *any* model                  | `vcnity/providers/router.py` raises before a provider is chosen; every call logs to `ai_calls` | The audit panel at the top of every page reads **0 · 0**. Raise a photo to Level 3 on the Intake page and watch its quotes vanish from the themes. |
+| The community decides meaning                                             | `vcnity/stages/s6_signoff.py` → `AuthorityError` → API 409                                     | As *analyst*, press "Try to confirm (will be refused)" on a community-decided theme.                                                               |
+| Every theme traces to a real quote                                        | `vcnity/stages/s4_themes.py` — quotes are cluster members; the model only labels               | Open any theme's quotes. Stage 5 hides anything whose summary says more than its quotes.                                                           |
+| Nothing above Level 1 goes near AI until the community confirms the level | `vcnity/pipeline.py` `GateError` → API 409                                                     | Set a file to Level 2 without confirming, then try to run stage 4.                                                                                 |
+| Analyst cuts need a written reason                                        | `vcnity/stages/s7_identify.py`                                                                 | Try to cut a flag with an empty reason.                                                                                                            |
+| Report leaves only with both approvals                                    | `vcnity/stages/s8_report.py` → 403                                                             | Export is disabled until community *and* analyst approve.                                                                                          |
 
 ### Run it
 
@@ -44,9 +46,9 @@ cp app/.env.example app/.env        # set VCNITY_DATA_DIR if Data/raw is elsewhe
 python app/start.py                  # syncs deps into ~/.vcnity, starts Postgres + API + UI
 ```
 
-First run downloads ~2 GB of Python packages and, on the first transcription, the 3 GB whisper model. The UI is at http://localhost:3000, the API at http://127.0.0.1:8100.
+First run downloads ~2 GB of Python packages and, on the first transcription, the 3 GB whisper model. The UI is at http://localhost:3000 .
 
-Nothing heavy is written inside this folder: the venv, the embedded PostgreSQL data, model weights and the Reflex build all live in `~/.vcnity/`. That is deliberate — this repo sits in a Google Drive folder.
+Nothing heavy is written inside this folder: the venv, the embedded PostgreSQL data, model weights and the Reflex build all live in `~/.vcnity/`. 
 
 ### Precompute before the demo
 
