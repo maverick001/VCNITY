@@ -2,6 +2,13 @@
 
 A runnable proof of concept of the ten-stage pipeline in `PRD/VCNITY_PRD_v0.3.md` §4, on the material in `Data/raw`. Everything runs on one laptop; no material leaves it.
 
+> **Before you run anything, pull these exact models — the app will not work without them:**
+> ```
+> ollama pull qwen3.5:4b     # required — text: theme labels, evidence checks, reports
+> ollama pull qwen3-vl:4b    # required — vision: reading photos of artefacts
+> ```
+> These exact tags, not a substitute like `qwen2-vl` or a different size — the app looks up these names literally and Ollama will 404 on anything else. Full prerequisites (including the optional `HF_TOKEN` for speaker labels) are in **[Run it](#run-it)** below.
+
 ## What it proves
 
 | PRD rule | Where it is code | What to show the client |

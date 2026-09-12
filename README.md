@@ -10,7 +10,7 @@ The app lives in `app/` and runs the PRD's full ten-stage pipeline (§4) end to 
 
 ![The prototype's Intake page — every file gets a consent record and a sensitivity level before anything runs on it](Image/index_page.jpg)
 
-**Install steps, prerequisites, the demo script, and what each stage proves live in one place — [`app/README.md`](app/README.md).** (Kept out of this file so there's a single source of truth instead of two copies to keep in sync.)
+**Before anything else, it needs two exact Ollama models pulled — `qwen3.5:4b` and `qwen3-vl:4b` — and nothing else will run without them.** Full prerequisites, the exact commands, the demo script, and what each stage proves live in one place — **[`app/README.md`](app/README.md).** (Kept out of this file so there's a single source of truth instead of two copies to keep in sync.)
 
 ## Getting the files
 
