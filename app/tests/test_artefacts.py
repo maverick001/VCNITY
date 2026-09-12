@@ -1,0 +1,61 @@
+from vcnity.config import settings
+from vcnity.models import Artefact, Job, SourceFile
+from vcnity.stages import s3_artefacts
+
+
+def test_parse_vlm():
+    out = s3_artefacts.parse_vlm(
+        "PATIENCE\nKINDNESS [illegible]\nFRENDSHIP\n"
+        "DESCRIPTION: Red marker on white butcher paper. A drawing of two faces."
+    )
+    assert out["illegible_count"] == 1
+    assert out["verbatim_text"].startswith("PATIENCE")
+    assert "FRENDSHIP" in out["verbatim_text"]
+    assert out["description"].startswith("Red marker")
+
+
+def test_parse_vlm_without_description_line():
+    out = s3_artefacts.parse_vlm("only words here")
+    assert out["verbatim_text"] == "only words here" and out["description"] == ""
+    assert out["degenerate"] is False
+
+
+def test_parse_vlm_collapses_runaway_repetition():
+    raw = "height:\nEmployer\n" + "- -\n" * 300 + "- me\n" + "DESCRIPTION: paper on a wall."
+    out = s3_artefacts.parse_vlm(raw)
+    assert out["degenerate"] is True
+    assert out["verbatim_text"].splitlines()[:2] == ["height:", "Employer"]
+    assert "- -" not in out["verbatim_text"]
+    assert out["verbatim_text"].endswith("[illegible]") and out["illegible_count"] == 1
+    assert out["description"].startswith("[model output repeated itself")
+
+
+def test_parse_vlm_collapses_consecutive_duplicate_words():
+    out = s3_artefacts.parse_vlm("HOPE\nHOPE\nHOPE\nHOPE\nHOPE\nHOPE\nfive\nDESCRIPTION: x")
+    assert out["verbatim_text"].startswith("HOPE\nfive") and out["degenerate"] is True
+
+
+def test_run_uses_router_and_skips_level3(db_session, monkeypatch, tmp_path):
+    job = Job(name="j"); db_session.add(job); db_session.flush()
+    pic = tmp_path / "p.jpg"; pic.write_bytes(b"x")
+    ok = SourceFile(job_id=job.id, filename="ok.jpg", kind="image", level=2, level_confirmed_by_community=True,
+                    path=str(pic), sha256="a" * 64, provenance={"ingested_path": str(pic)})
+    l3 = SourceFile(job_id=job.id, filename="l3.jpg", kind="image", level=3, level_confirmed_by_community=True,
+                    path=str(pic), sha256="b" * 64, provenance={"ingested_path": str(pic)})
+    db_session.add_all([ok, l3]); db_session.flush()
+
+    calls = []
+    def fake_call(session, **kw):
+        calls.append(kw)
+        return "HOPE\nDESCRIPTION: green marker on paper."
+    monkeypatch.setattr(s3_artefacts.router, "call", fake_call)
+
+    rep = s3_artefacts.run(db_session, job.id)
+    assert len(calls) == 1 and calls[0]["level"] == 2 and calls[0]["images"] == [pic]
+    # stage 3 asks for the vision model, not whatever the default text model is —
+    # this is the one stage that must never silently fall back to the text model.
+    assert calls[0]["model"] == settings.ollama_vision_model
+    assert calls[0]["max_tokens"] == s3_artefacts.MAX_TOKENS
+    arts = db_session.query(Artefact).all()
+    assert len(arts) == 1 and arts[0].verbatim_text == "HOPE"
+    assert any("Level 3" in f.get("skipped", "") for f in rep["files"])

@@ -1,8 +1,24 @@
-# VCNITY 2026 AI Project — PRD Workspace
+# VCNITY 2026 AI Project — PRD Workspace + Prototype
 
-This is **not a software application**. There's no source code, no build system, nothing to install, and no test suite to run. This repo is a Google Drive folder of documents for an IFN735 industry/capstone project: the team is writing a **Product Requirements Document (PRD)** for VCNITY's 2026 AI project — an AI-assisted analysis pipeline that turns messy Creative Co-Design material (multi-speaker audio, code-switched languages, local slang, photos of handmade artefacts) into policy-ready themes, without letting AI override community authority over meaning.
+This repo is two things for an IFN735 industry/capstone project: a **Product Requirements Document (PRD)** for VCNITY's 2026 AI project, and a **working prototype** of the pipeline it describes — an AI-assisted analysis pipeline that turns messy Creative Co-Design material (multi-speaker audio, code-switched languages, local slang, photos of handmade artefacts) into policy-ready themes, without letting AI override community authority over meaning.
 
-If you were expecting `npm install` / `pytest` instructions, they don't apply here. This README instead covers how to get set up with the files and how we check our work.
+This README covers both: how to get set up with the PRD files, and how to install and run the prototype app.
+
+## Prototype app — quickstart
+
+The app lives in `app/` and runs the PRD's full ten-stage pipeline (§4) end to end: intake → transcription → theme drafting → community sign-off → a council-style report, with two hard rules enforced in code, not just on paper — Level 3 material never reaches any AI model, and an analyst can never override a community decision.
+
+![The prototype's Intake page — every file gets a consent record and a sensitivity level before anything runs on it](Image/index_page.jpg)
+
+Prerequisites: [uv](https://docs.astral.sh/uv/), and [Ollama](https://ollama.com) with `qwen3.5:4b` (text) and `qwen3-vl:4b` (vision) pulled.
+
+```
+git clone <repo-url> && cd <repo>
+cp app/.env.example app/.env      # fill in HF_TOKEN if you want speaker labels
+python app/start.py                # syncs deps, starts Postgres + API + UI
+```
+
+Then open http://localhost:3000. Full setup, the demo script, and what each stage proves: **[`app/README.md`](app/README.md)**. Tests: `uv run --project app pytest app/tests -q`.
 
 ## Getting the files
 
@@ -16,7 +32,8 @@ Most of the working content (`PRD/`, `Document/`, `Docs/`, `Data/`, `Assessment1
 
 ## What's where
 
-- **`PRD/VCNITY_PRD_v0.2.md`** — the live PRD. This is the working source of truth; open this file to read or edit the current draft.
+- **`PRD/VCNITY_PRD_v0.3.md`** — the live PRD, the working source of truth. `v0.2` sits alongside it as the immediately-prior draft, kept for reference — don't edit it.
+- **`app/`** — the prototype app (see the quickstart above and `app/README.md`).
 - **`PRD/VCNITY-PRD-Clarification-Questions.md`** — numbered open questions for the product owner (the product owner), grouped by topic.
 - **`Document/VCNITY 2026 AI project.pdf`** — the client's pitch deck. Every requirement in the PRD should trace back to a slide in here.
 - **`Document/VCNITY_Technical_Workflow_Proposal_Shafwon.pdf`** — the team's own wider-platform sketch. Not submitted, not committed to — don't treat it as scope.
@@ -31,7 +48,7 @@ Most of the working content (`PRD/`, `Document/`, `Docs/`, `Data/`, `Assessment1
 There's no test command. "Verification" here means:
 
 1. **Re-read the PRD** after any edit — check it against the deck (`Document/VCNITY 2026 AI project.pdf`) so every requirement still traces to a slide.
-2. **Check the assumption markers.** Every `` `[A1]` ``…`` `[An]` `` inline marker in the PRD must have a matching row in the §6 assumption table, and vice versa. After adding/removing one, renumber and check both directions — `grep -n '\[A[0-9]' PRD/VCNITY_PRD_v0.2.md` is a quick way to list them all.
+2. **Check the assumption markers.** Every `` `[A1]` ``…`` `[An]` `` inline marker in the PRD must have a matching row in the §9 assumption table, and vice versa. After adding/removing one, renumber and check both directions — `grep -n '\[A[0-9]' PRD/VCNITY_PRD_v0.3.md` is a quick way to list them all.
 3. **Check scope stayed pipeline-only.** Community hub, ideas board, public pages, job matching, billing, SROI numbers, engagement analytics, moderation, retention after a job, and AI distress detection are explicitly out of scope — flag anything that creeps toward these.
 4. **Preserve the two non-negotiable rules:** when community and analyst disagree about what material *means*, the community decides; and Level 3 sensitivity material reaching an outside AI service is zero, no exceptions. Confirm both survived your edit.
 5. **Don't reword/reorder/delete existing sentences as a side effect** of an unrelated change — diff your edit (`git diff`) and make sure unrelated lines didn't move.

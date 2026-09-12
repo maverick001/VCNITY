@@ -1,0 +1,16 @@
+# Community word list — names, slang, local place words (PRD §4 stage 2).
+# One per line. Add "@person" after a personal name so it is redacted at Level 2.
+# This seed came from the material itself; the community owns the real list.
+Kelvin Grove
+QUT
+Queensland University of Technology
+Ipswich
+Tulmur
+Meanjin
+Brisbane
+FQI
+Nicholas Street Precinct
+Shape Your Ipswich
+co-design
+VCNITY
+Priya @person
