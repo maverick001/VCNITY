@@ -1,0 +1,10 @@
+Archive/
+Document/
+Data/
+Docs/
+PRD/
+.claude/
+
+.env
+Claude.md
+~WRL*.tmp
