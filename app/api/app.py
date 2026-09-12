@@ -97,7 +97,8 @@ def create_app(testing: bool = False) -> Flask:
 
     @app.get("/health")
     def health():
-        return jsonify({"ok": True, "model": settings.ollama_model, "hf_token": bool(settings.hf_token)})
+        return jsonify({"ok": True, "model": settings.ollama_model, "vision_model": settings.ollama_vision_model,
+                        "hf_token": bool(settings.hf_token)})
 
     # ---- jobs & files ----
 
@@ -376,7 +377,8 @@ def create_app(testing: bool = False) -> Flask:
 
 def main():
     app = create_app()
-    print(f"VCNITY API on http://127.0.0.1:{settings.api_port}  (model {settings.ollama_model}, "
+    print(f"VCNITY API on http://127.0.0.1:{settings.api_port}  "
+          f"(text: {settings.ollama_model} · vision: {settings.ollama_vision_model} — never loaded together, "
           f"HF token {'present' if settings.hf_token else 'absent'})")
     app.run(host="127.0.0.1", port=settings.api_port, debug=False, threaded=True)
 

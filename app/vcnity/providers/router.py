@@ -27,20 +27,20 @@ class UnredactedLevel2(PermissionError):
     """Raised when Level 2 material reaches the router without redaction."""
 
 
-def _local() -> Provider:
-    return OllamaProvider(settings.ollama_model)
+def _local(model: str | None = None) -> Provider:
+    return OllamaProvider(model or settings.ollama_model)
 
 
-def get_provider(level: int, *, redacted: bool = False) -> Provider:
+def get_provider(level: int, *, redacted: bool = False, model: str | None = None) -> Provider:
     if level >= 3:
         raise Level3NoAI("Level 3 material never reaches AI (PRD §4 sensitivity table)")
     if level == 2:
         if not redacted:
             raise UnredactedLevel2("Level 2 material must be redacted before any model sees it")
-        return _local()
+        return _local(model)
     if settings.allow_hosted:
         return HostedStub()
-    return _local()
+    return _local(model)
 
 
 def call(
@@ -56,8 +56,9 @@ def call(
     json_mode: bool = False,
     redacted: bool = False,
     max_tokens: int = 2000,
+    model: str | None = None,
 ) -> str:
-    provider = get_provider(level, redacted=redacted)
+    provider = get_provider(level, redacted=redacted, model=model)
     out = provider.complete(prompt, system=system, images=images, json_mode=json_mode, max_tokens=max_tokens)
     record_call(
         session,

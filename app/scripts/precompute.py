@@ -104,7 +104,8 @@ def main() -> int:
     args = ap.parse_args()
 
     db.init_db()
-    log(f"data dir {settings.data_dir} · model {settings.ollama_model} · HF token {'yes' if settings.hf_token else 'no'}")
+    log(f"data dir {settings.data_dir} · text model {settings.ollama_model} · "
+        f"vision model {settings.ollama_vision_model} · HF token {'yes' if settings.hf_token else 'no'}")
 
     with db.session() as s:
         job_id = args.job or create_job(s, args.confirm_levels)

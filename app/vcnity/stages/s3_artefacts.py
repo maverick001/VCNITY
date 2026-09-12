@@ -8,12 +8,18 @@ field, which a person fills in.
 Level 2 images: an image cannot be redacted, and the text being read is the
 maker's own. It runs locally and a person checks it at sign-off, which is what
 "a person must check it" asks for. That reasoning is recorded in the audit row.
+
+Runs on settings.ollama_vision_model (qwen3-vl:4b), separately from the text
+model the other stages use — see providers/ollama_local.py for why the two
+are never loaded at once on this machine.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
+from ..config import settings
 from ..models import Artefact, Job, SourceFile
 from ..providers import router
 from ._gate import ai_allowed, why_not
@@ -33,7 +39,15 @@ PROMPT_VERBATIM = (
     "materials, colours, layout, drawings — in two sentences. "
     "Do not say what anything means, symbolises, or suggests. Do not describe feelings."
 )
-MAX_TOKENS = 700
+# settings.ollama_vision_model (qwen3-vl:4b) ignores the `think=False` flag: it
+# still runs a full <think> pass before answering, and that pass alone can run
+# to 1000+ tokens even for a trivial prompt (measured empirically — see
+# docs/superpowers/plans/2026-09-11-vcnity-prototype.md history). A budget sized
+# for a plain-answer model leaves it no room to ever reach the real answer, so
+# every photo comes back empty. This is generous on purpose; override via
+# VCNITY_VISION_MAX_TOKENS if it turns out to need more or if you swap in a
+# model that doesn't force reasoning.
+MAX_TOKENS = int(os.environ.get("VCNITY_VISION_MAX_TOKENS", "3000"))
 DEGENERATE_NOTE = "[model output repeated itself and was cut short — a person should read this artefact]"
 
 _ILLEGIBLE = re.compile(r"\[illegible\]", re.IGNORECASE)
@@ -93,6 +107,7 @@ def run(session, job_id: int, files: list[int] | None = None) -> dict:
             session, job_id=job_id, stage=3, level=sf.level,
             purpose="artefact-verbatim" + ("-l2-local-human-check" if sf.level == 2 else ""),
             prompt=PROMPT_VERBATIM, system=SYSTEM, images=[img], redacted=True, max_tokens=MAX_TOKENS,
+            model=settings.ollama_vision_model,
         )
         parsed = parse_vlm(raw)
         fields = {k: parsed[k] for k in ("verbatim_text", "description", "illegible_count")}

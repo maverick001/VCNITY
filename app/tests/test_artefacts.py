@@ -1,3 +1,4 @@
+from vcnity.config import settings
 from vcnity.models import Artefact, Job, SourceFile
 from vcnity.stages import s3_artefacts
 
@@ -51,6 +52,10 @@ def test_run_uses_router_and_skips_level3(db_session, monkeypatch, tmp_path):
 
     rep = s3_artefacts.run(db_session, job.id)
     assert len(calls) == 1 and calls[0]["level"] == 2 and calls[0]["images"] == [pic]
+    # stage 3 asks for the vision model, not whatever the default text model is —
+    # this is the one stage that must never silently fall back to the text model.
+    assert calls[0]["model"] == settings.ollama_vision_model
+    assert calls[0]["max_tokens"] == s3_artefacts.MAX_TOKENS
     arts = db_session.query(Artefact).all()
     assert len(arts) == 1 and arts[0].verbatim_text == "HOPE"
     assert any("Level 3" in f.get("skipped", "") for f in rep["files"])

@@ -18,8 +18,8 @@ A runnable proof of concept of the ten-stage pipeline in `PRD/VCNITY_PRD_v0.3.md
 Prerequisites (both Windows 11 and macOS):
 
 1. [uv](https://docs.astral.sh/uv/) on the PATH.
-2. [Ollama](https://ollama.com) running, with a vision-capable model pulled: `ollama pull qwen3.5:4b`.
-3. Optional — speaker labels: a free HuggingFace token with the terms accepted on `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`. Put it in `app/.env` as `HF_TOKEN=hf_…`.
+2. [Ollama](https://ollama.com) running, with two models pulled: `ollama pull qwen3.5:4b` (text — theme labels, evidence checks, reports) and `ollama pull qwen3-vl:4b` (vision — reading photos of artefacts). On a 16GB, no-GPU machine the two are never loaded into Ollama at the same time — see `vcnity/providers/ollama_local.py` — so this fits as long as pipeline stages keep running one at a time.
+3. Optional — speaker labels: a free HuggingFace token with the terms accepted on `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`. Put it in `app/.env` as `HF_TOKEN=hf_…`. Without it, stage 2's transcript still works; segments just come back without a speaker label.
 
 Then:
 

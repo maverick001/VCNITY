@@ -22,6 +22,7 @@ class Settings:
     cache_dir: Path
     pg_dir: Path
     ollama_model: str
+    ollama_vision_model: str
     hf_token: str | None
     allow_hosted: bool
     small_n: int
@@ -37,7 +38,10 @@ def load_settings() -> Settings:
         home=home,
         cache_dir=home / "cache",
         pg_dir=home / "pgdata",
+        # Two different models, used at different pipeline stages. On a 16GB/no-GPU
+        # laptop they must never be resident together — see providers/ollama_local.py.
         ollama_model=os.environ.get("OLLAMA_MODEL", "qwen3.5:4b"),
+        ollama_vision_model=os.environ.get("OLLAMA_VISION_MODEL", "qwen3-vl:4b"),
         hf_token=os.environ.get("HF_TOKEN") or None,
         allow_hosted=os.environ.get("VCNITY_ALLOW_HOSTED", "0") == "1",
         small_n=int(os.environ.get("VCNITY_SMALL_N", "3")),
