@@ -1,27 +1,29 @@
 # VCNITY Prototype
 
-This is a working prototype of an AI-assisted pipeline that turns messy Creative Co-Design material — multi-speaker audio, code-switched languages, local slang, photos of handmade artefacts — into policy-ready themes, without letting AI override the community's say over what things mean. Everything runs on your own laptop; nothing is sent anywhere.
+This is a prototype application of AI-assisted data pipeline that turns community creative Co-Design materials, such as multi-speaker audio, code-switched languages, local slang, photos of handmade artefacts into policy-ready themes, without letting AI distort or override the community's say. Everything runs on your local PC — nothing is sent to the cloud.
+
+The Main Dashboard:
 
 ![The prototype's Intake page — every file gets a consent record and a sensitivity level before anything runs on it](Image/index_page.jpg)
 
-## Before you start
+## Preparation for Installation
 
-Pull these two exact models — the app won't run without them:
-
-```
-ollama pull qwen3.5:4b     # text: theme labels, evidence checks, reports
-ollama pull qwen3-vl:4b    # vision: reading photos of artefacts
-```
-
-Use these exact names. A different tag or size (like `qwen2-vl`) won't work — the app looks them up literally.
-
-You'll also need:
+You'll need:
 
 1. [uv](https://docs.astral.sh/uv/) installed and on your PATH.
-2. [Ollama](https://ollama.com) running, with the two models above pulled. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
-3. Optional, for speaker labels in transcripts: a free HuggingFace token (accept the terms on `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`, then add `HF_TOKEN=hf_…` to `app/.env`). Without it, transcription still works, just without speaker labels.
+2. [Ollama](https://ollama.com) is installed and running, with the two models below pulled. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
+3. To process audio files, a free HuggingFace token needs to be configured. You need to add your token `HF_TOKEN=hf_…` to `app/.env`. Without it, the transcription can still work, but without speaker labels to separate them.
 
-Works on Windows 11 and macOS.
+
+
+Pull these two open-source Qwen models from Ollama:
+
+```
+ollama pull qwen3.5:4b    # text model for evidence checks and reporting
+ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
+```
+
+
 
 ## Install and run
 
@@ -31,11 +33,13 @@ cp app/.env.example app/.env        # set VCNITY_DATA_DIR if your data isn't in 
 python app/start.py                  # installs dependencies, starts the database, API, and UI
 ```
 
-Open http://localhost:3000 once it's running.
+Open http://localhost:3000 once the app is running.
 
-The first run downloads about 2 GB of Python packages, plus a 3 GB speech-recognition model the first time you transcribe something. None of this is stored in the project folder — it all lives in `~/.vcnity/`, so the repo itself stays small.
+The first run on your PC will download about 2 GB of Python packages, plus a 3 GB speech-recognition model the first time you transcribe something, and a small multilingual embedding model (used to group material into draft themes) the first time you draft themes. None of this is stored in the project folder — it all lives in `~/.vcnity/`, so the repo itself stays small.
 
-## Speeding up transcription
+
+
+## Speeding up transcription (Optional)
 
 Transcribing a recording can take about an hour on a laptop CPU. If you want it ready ahead of time instead of waiting live, run:
 
@@ -57,7 +61,7 @@ uv run --project app python app/scripts/precompute.py --job 1 --stages 2 --only-
 
 ## Using the app
 
-Switch roles with the selector in the top right — the app behaves differently depending on whether you're the facilitator, the community, or the analyst. The stage list on the left shows what's been completed.
+You can switch your roles on the selector in the top right — the app behaves differently depending on whether you're the facilitator, the community, or the analyst. The stage list on the left shows what's been completed.
 
 The pipeline runs through: **Intake** (upload files, set a sensitivity level and consent) → **Transcription** → **Things people made** (photos and objects) → **Draft themes** → **Sign-off** (community and analyst review) → **Could anyone be identified?** → **Report** → **Report back**. You can also raise a concern from any page.
 
