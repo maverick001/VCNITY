@@ -23,6 +23,16 @@ WEB = HOME / "web"
 
 
 def main() -> int:
+    # A Windows console defaults to a codepage (e.g. cp1252) that can't encode
+    # the arrows/dashes this script prints, crashing on the first such print.
+    # Reconfigure this process's own stdout/stderr, and pass PYTHONIOENCODING
+    # to the API/UI subprocesses so their own non-ASCII prints don't crash either.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     api_only = "--api-only" in sys.argv
     if shutil.which("uv") is None:
         print("uv is not installed. See https://docs.astral.sh/uv/ — then re-run.")
@@ -33,6 +43,7 @@ def main() -> int:
     env["UV_PROJECT_ENVIRONMENT"] = str(VENV)
     env["REFLEX_WEB_WORKDIR"] = str(WEB)
     env.setdefault("VCNITY_HOME", str(HOME))
+    env.setdefault("PYTHONIOENCODING", "utf-8")
 
     print(f"[start] syncing dependencies into {VENV} (first run downloads ~2 GB)")
     subprocess.run(["uv", "sync", "--project", str(APP), "--extra", "dev"], env=env, check=True)

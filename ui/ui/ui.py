@@ -61,23 +61,31 @@ def audit_panel() -> rx.Component:
     return rx.card(
         rx.hstack(
             rx.cond(AppState.audit_ok,
+                    rx.icon("shield-check", size=18, color="green"),
+                    rx.icon("shield-alert", size=18, color="red")),
+            rx.cond(AppState.audit_ok,
                     rx.badge("Level 3 → AI: 0 · hosted calls on L2+: 0", color_scheme="green", size="2"),
                     rx.badge("AUDIT BREACH", color_scheme="red", size="2")),
             rx.text("PRD §5: zero, no exceptions", size="1", color="gray"),
             rx.text(AppState.audit_total_text, size="1", color="gray"),
             spacing="3", align="center"),
-        size="1")
+        size="1", padding="12px 16px")
 
 
 def stage_nav() -> rx.Component:
     def item(s):
+        active = AppState.router.page.path == s["route"]
         return rx.link(
             rx.hstack(
                 rx.cond(s["done"], rx.icon("circle-check", size=16, color="green"),
                         rx.icon("circle", size=16, color="gray")),
                 rx.text(s["n"], " · ", s["name"], size="2"),
                 spacing="2", align="center"),
-            href=s["route"], underline="none")
+            href=s["route"], underline="none", width="100%",
+            padding="6px 10px", border_radius="6px",
+            background_color=rx.cond(active, "var(--accent-4)", "transparent"),
+            color=rx.cond(active, "var(--accent-12)", "inherit"),
+            _hover={"background_color": rx.cond(active, "var(--accent-4)", "var(--gray-4)")})
 
     return rx.vstack(
         rx.heading("VCNITY", size="5"),
@@ -85,23 +93,27 @@ def stage_nav() -> rx.Component:
         rx.divider(),
         rx.foreach(AppState.stage_names, item),
         rx.divider(),
-        rx.link(rx.text("Concerns", size="2"), href="/concerns", underline="none"),
-        spacing="2", align="start", width="230px", min_width="230px", padding="16px",
+        rx.link(rx.text("Concerns", size="2"), href="/concerns", underline="none",
+                width="100%", padding="6px 10px", border_radius="6px",
+                _hover={"background_color": "var(--gray-4)"}),
+        spacing="2", align="start", width="230px", min_width="230px", padding="20px",
+        background_color="var(--gray-2)",
         border_right="1px solid var(--gray-5)", min_height="100vh")
 
 
 def top_bar(title: str) -> rx.Component:
     return rx.hstack(
-        rx.heading(title, size="6"),
+        rx.heading(title, size="6", weight="bold"),
         rx.spacer(),
-        rx.hstack(rx.text("I am the", size="2"),
+        rx.hstack(rx.text("I am the", size="2", color="gray"),
                   rx.select(ROLES, value=AppState.role, on_change=AppState.set_role),
                   align="center"),
         rx.cond(AppState.jobs.length() > 1,
                 rx.select(AppState.job_options, value=AppState.job_id.to(str), on_change=AppState.select_job),
                 rx.fragment()),
         concern_dialog(),
-        width="100%", align="center", spacing="4", wrap="wrap")
+        width="100%", align="center", spacing="4", wrap="wrap",
+        padding_bottom="16px", border_bottom="1px solid var(--gray-5)")
 
 
 def message_bar() -> rx.Component:
@@ -125,7 +137,7 @@ def page(title: str, *children) -> rx.Component:
     return rx.hstack(
         stage_nav(),
         rx.vstack(top_bar(title), audit_panel(), message_bar(), *children,
-                  spacing="4", width="100%", padding="24px", max_width="1200px"),
+                  spacing="4", width="100%", padding="32px", max_width="1200px"),
         align="start", width="100%", spacing="0")
 
 
@@ -146,6 +158,7 @@ def file_row(f) -> rx.Component:
                             rx.button("Confirm level", size="1", on_click=AppState.confirm_file(f["id"]))))),
         rx.table.cell(rx.cond(f["consent_id"], rx.badge(f["consent_text"]),
                               rx.badge("NO CONSENT", color_scheme="red"))),
+        _hover={"background_color": "var(--gray-3)"},
     )
 
 
