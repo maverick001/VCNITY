@@ -14,22 +14,19 @@ You'll need:
 2. [Ollama](https://ollama.com) is installed and running, with the two models below pulled. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
 3. To process audio files, a free HuggingFace token needs to be configured. You need to add your token `HF_TOKEN=hf_…` to `app/.env`. Without it, the transcription can still work, but without speaker labels to separate them.
 
-
-
 Pull these two open-source Qwen models from Ollama:
 
 ```
-ollama pull qwen3.5:4b    # text model for evidence checks and reporting
+ollama pull qwen3.5:4b    # text model for evidence checking and reporting
 ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 ```
-
-
 
 ## Install and run
 
 ```
-git clone <repo-url> && cd <repo>
-cp app/.env.example app/.env        # set VCNITY_DATA_DIR if your data isn't in Data/raw
+git clone https://github.com/maverick001/vcnity
+cd vcnity
+cp app/.env.example app/.env         # set VCNITY_DATA_DIR if your data isn't in Data/raw
 python app/start.py                  # installs dependencies, starts the database, API, and UI
 ```
 
@@ -37,11 +34,9 @@ Open http://localhost:3000 once the app is running.
 
 The first run on your PC will download about 2 GB of Python packages, plus a 3 GB speech-recognition model the first time you transcribe something, and a small multilingual embedding model (used to group material into draft themes) the first time you draft themes. None of this is stored in the project folder — it all lives in `~/.vcnity/`, so the repo itself stays small.
 
-
-
 ## Speeding up transcription (Optional)
 
-Transcribing a recording can take about an hour on a laptop CPU. If you want it ready ahead of time instead of waiting live, run:
+Transcribing an audio clip can take longer than expected on a traditional Intel Core CPU. If you want it ready ahead of time instead of waiting live, run:
 
 ```
 uv run --project app python app/scripts/precompute.py --confirm-levels --demo-signoff
@@ -51,12 +46,6 @@ This processes everything through the theme-drafting stage and fills in the late
 
 ```
 uv run --project app python app/scripts/precompute.py --job 1 --reset-signoff
-```
-
-If you add your HuggingFace token after already precomputing, you can add speaker labels without re-transcribing:
-
-```
-uv run --project app python app/scripts/precompute.py --job 1 --stages 2 --only-diarise
 ```
 
 ## Using the app
