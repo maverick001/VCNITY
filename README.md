@@ -29,7 +29,7 @@ ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 
 ```
 git clone <repo-url> && cd <repo>
-cp app/.env.example app/.env        # set VCNITY_DATA_DIR if your data isn't in Data/raw
+cp app/.env.example app/.env        # add VCNITY_DATA_DIR=<path> to app/.env if your data isn't in Data/raw
 python app/start.py                  # installs dependencies, starts the database, API, and UI
 ```
 
@@ -41,19 +41,21 @@ The first run on your PC will download about 2 GB of Python packages, plus a 3 G
 
 ## Speeding up transcription (Optional)
 
-Transcribing a recording can take about an hour on a laptop CPU. If you want it ready ahead of time instead of waiting live, run:
+Transcribing a recording can take about an hour on a laptop CPU. Rather than wait for that live, you can pre-run the whole pipeline ahead of time:
 
 ```
 uv run --project app python app/scripts/precompute.py --confirm-levels --demo-signoff
 ```
 
-This processes everything through the theme-drafting stage and fills in the later sign-off steps with placeholder decisions, so every page has something to look at. To clear those placeholders and do sign-off for real:
+This does two things: `--confirm-levels` confirms each file's sensitivity level for you (normally a community reviewer's job, and AI stages won't run without it), and `--demo-signoff` fills in the sign-off, identifiability, and report stages with clearly-labelled placeholder decisions. The result: every page in the app has something to look at, without anyone having done that review for real yet.
+
+Once you're ready to do that review for real, clear the placeholders first:
 
 ```
 uv run --project app python app/scripts/precompute.py --job 1 --reset-signoff
 ```
 
-If you add your HuggingFace token after already precomputing, you can add speaker labels without re-transcribing:
+And if you only add your HuggingFace token after you've already precomputed, you don't need to re-transcribe — this adds speaker labels to the transcript you already have:
 
 ```
 uv run --project app python app/scripts/precompute.py --job 1 --stages 2 --only-diarise
