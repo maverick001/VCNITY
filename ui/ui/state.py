@@ -1,6 +1,7 @@
 """One state for the whole UI. Every handler talks to the API and reloads."""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import reflex as rx
@@ -143,6 +144,14 @@ class AppState(rx.State):
     @rx.var
     def run_stage_text(self) -> str:
         return str(self.run.get("stage", ""))
+
+    @rx.var
+    def run_elapsed_text(self) -> str:
+        started = self.run.get("started")
+        if not started:
+            return "just started"
+        m, s = divmod(max(0, int(time.time() - started)), 60)
+        return f"{m}m {s:02d}s" if m else f"{s}s"
 
     @rx.var
     def status_line(self) -> str:

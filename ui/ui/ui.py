@@ -265,7 +265,8 @@ def pipeline_page() -> rx.Component:
         rx.text("Every stage can be re-run live. AI stages refuse to run while a Level 2 file is unconfirmed, "
                 "and stage 8 refuses while an identifiability flag is undecided.", color="gray"),
         rx.cond(AppState.running,
-                rx.callout(rx.text("Stage ", AppState.run_stage_text, " is running — this page polls every 3 s."),
+                rx.callout(rx.text("Stage ", AppState.run_stage_text, " is running — ",
+                                    AppState.run_elapsed_text, " elapsed. This page polls every 3 s."),
                            icon="loader", width="100%"),
                 rx.fragment()),
         rx.foreach(AppState.stage_names, stage_card),
