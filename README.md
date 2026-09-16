@@ -14,8 +14,6 @@ You'll need:
 2. [Ollama](https://ollama.com) is installed and running, with the two models below pulled. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
 3. To process audio files, a free HuggingFace token needs to be configured. You need to add your token `HF_TOKEN=hf_…` to `app/.env`. Without it, the transcription can still work, but without speaker labels to separate them.
 
-
-
 Pull these two open-source Qwen models from Ollama:
 
 ```
@@ -23,12 +21,11 @@ ollama pull qwen3.5:4b    # text model for evidence checks and reporting
 ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 ```
 
-
-
 ## Install and run
 
 ```
-git clone <repo-url> && cd <repo>
+git clone https://github.com/maverick001/vcnity.git
+cd vcnity
 cp app/.env.example app/.env        # add VCNITY_DATA_DIR=<path> to app/.env if your data isn't in Data/raw
 python app/start.py                  # installs dependencies, starts the database, API, and UI
 ```
@@ -36,8 +33,6 @@ python app/start.py                  # installs dependencies, starts the databas
 Open http://localhost:3000 once the app is running.
 
 The first run on your PC will download about 2 GB of Python packages, plus a 3 GB speech-recognition model the first time you transcribe something, and a small multilingual embedding model (used to group material into draft themes) the first time you draft themes. None of this is stored in the project folder — it all lives in `~/.vcnity/`, so the repo itself stays small.
-
-
 
 ## Speeding up transcription (Optional)
 
@@ -55,11 +50,7 @@ Once you're ready to do that review for real, clear the placeholders first:
 uv run --project app python app/scripts/precompute.py --job 1 --reset-signoff
 ```
 
-And if you only add your HuggingFace token after you've already precomputed, you don't need to re-transcribe — this adds speaker labels to the transcript you already have:
 
-```
-uv run --project app python app/scripts/precompute.py --job 1 --stages 2 --only-diarise
-```
 
 ## Using the app
 
