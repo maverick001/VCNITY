@@ -33,6 +33,7 @@ class AppState(rx.State):
     # intake
     files: list[dict[str, Any]] = []
     wordlist_text: str = ""
+    brief_text: str = ""
     upload_level: str = "2"
     upload_consent_label: str = ""
     upload_consent_scope: str = ""
@@ -187,10 +188,6 @@ class AppState(rx.State):
         return len(self.unsupported)
 
     @rx.var
-    def job_brief(self) -> str:
-        return str(self.job.get("brief", ""))
-
-    @rx.var
     def stage_names(self) -> list[dict[str, Any]]:
         return [{**s, "route": STAGE_ROUTES.get(int(s["n"]), "/")} for s in self.stages]
 
@@ -214,6 +211,7 @@ class AppState(rx.State):
         if j is None:
             return
         self.job = j
+        self.brief_text = j.get("brief", "")
         self.files = j.get("files", [])
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
         st = self._api(api.get, f"/jobs/{self.job_id}/status") or {}
@@ -293,6 +291,14 @@ class AppState(rx.State):
         self.job_id = int(v)
         self.selected_file_id = 0
         self.refresh()
+
+    def set_brief_text(self, v: str):
+        self.brief_text = v
+
+    def save_brief(self):
+        if self._api(api.patch, f"/jobs/{self.job_id}", {"brief": self.brief_text}) is not None:
+            self._say("Brief saved. Re-run stage 8 to regenerate the report.", "ok")
+            self.refresh()
 
     def set_wordlist_text(self, v: str):
         self.wordlist_text = v

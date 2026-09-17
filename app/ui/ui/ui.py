@@ -232,7 +232,8 @@ def intake_page() -> rx.Component:
         rx.cond((AppState.role == "facilitator") & (AppState.job_id != 0), upload_card(), rx.fragment()),
         rx.card(
             rx.heading("Brief", size="3"),
-            rx.text(AppState.job_brief, white_space="pre-wrap", size="2"),
+            rx.text_area(value=AppState.brief_text, on_change=AppState.set_brief_text, rows="8", width="100%"),
+            rx.button("Save brief", on_click=AppState.save_brief, size="2"),
             width="100%"),
         rx.card(
             rx.heading("Community word list", size="3"),

@@ -114,6 +114,17 @@ def create_app(testing: bool = False) -> Flask:
         with db.session() as s:
             return jsonify([{"id": j.id, "name": j.name, "status": j.status} for j in s.query(Job).order_by(Job.id)])
 
+    @app.patch("/jobs/<int:job_id>")
+    def update_job(job_id):
+        data = request.get_json(force=True)
+        with db.session() as s:
+            j = s.get(Job, job_id)
+            if j is None:
+                return _err("no such job", 404)
+            if "brief" in data:
+                j.brief = data["brief"]
+            return jsonify({"id": j.id, "name": j.name, "brief": j.brief})
+
     @app.get("/jobs/<int:job_id>")
     def get_job(job_id):
         with db.session() as s:
