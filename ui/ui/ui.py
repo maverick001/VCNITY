@@ -265,7 +265,7 @@ def stage_card(s) -> rx.Component:
 
 def pipeline_page() -> rx.Component:
     return page(
-        "1 · Pipeline",
+        "Pipeline overview",
         rx.text("Every stage can be re-run live. AI stages refuse to run while a Level 2 file is unconfirmed, "
                 "and stage 8 refuses while an identifiability flag is undecided.", color="gray"),
         rx.cond(AppState.running,
