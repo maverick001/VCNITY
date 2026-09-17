@@ -252,9 +252,7 @@ def stage_card(s) -> rx.Component:
             rx.cond(s["done"], rx.icon("circle-check", color="green"), rx.icon("circle", color="gray")),
             rx.vstack(rx.text(s["n"], " · ", s["name"], weight="bold"),
                       rx.hstack(
-                          rx.cond(s["done"],
-                                  rx.badge("done", color_scheme="green"),
-                                  rx.badge("not run yet", color_scheme="gray")),
+                          rx.badge(rx.cond(s["done"], "done", "not run yet"), color_scheme="gray"),
                           rx.link("view", href=s["route"], size="1", color="var(--gray-11)"),
                           spacing="2", align="center"),
                       spacing="0"),
