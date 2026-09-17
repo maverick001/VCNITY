@@ -120,8 +120,8 @@ def status(session, job_id: int) -> dict:
         {"n": 4, "done": bool(themes)},
         {"n": 5, "done": job.status.startswith("stage5") or any(t.status != "draft" for t in themes)},
         {"n": 6, "done": bool(themes) and all(t.decided_by for t in themes if t.status not in ("unsupported",))},
-        {"n": 7, "done": bool(themes) and job.status.startswith(("stage7", "stage8", "stage9", "done"))
-                 and all(f.decision for f in flags)},
+        {"n": 7, "done": bool(themes) and all(f.decision for f in flags)
+                 and (bool(flags) or job.status.startswith(("stage7", "stage8", "stage9", "done")))},
         {"n": 8, "done": "client" in reports and bool(reports["client"].markdown)},
         {"n": 9, "done": "reportback" in reports and reports["reportback"].sent},
     ]
