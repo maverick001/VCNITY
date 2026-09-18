@@ -58,6 +58,8 @@ def add_file(
         consent_id=consent.id, sha256=sha256_of(path), path=str(path), provenance={},
     )
     session.add(sf)
+    session.flush()  # assigns sf.id
+    sf.filename = f"{sf.id}_{path.name}"  # so the id shown elsewhere (e.g. the transcript picker) is findable by name
     session.flush()
     return sf
 
