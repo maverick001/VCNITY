@@ -1,5 +1,5 @@
 """Stage 4 — Draft themes. Sorts related bits into the themes agreed with the
-community at stage 0, each linked to its quotes, and suggests new *draft* themes
+community at stage 1, each linked to its quotes, and suggests new *draft* themes
 for anything that doesn't fit (PRD §4 stage 4, A17).
 
 Level 2 first: real names are swapped for made-up ones, and a person checks the

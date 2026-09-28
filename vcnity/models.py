@@ -136,7 +136,7 @@ class Theme(Base):
     cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     n_people: Mapped[int] = mapped_column(Integer, default=0)  # distinct voices/files behind the quotes — a hint only
     people_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the analyst's count by hand (PRD A6)
-    agreed_upfront: Mapped[bool] = mapped_column(Boolean, default=False)  # agreed with the community at stage 0
+    agreed_upfront: Mapped[bool] = mapped_column(Boolean, default=False)  # agreed with the community at stage 1
     from_level3: Mapped[bool] = mapped_column(Boolean, default=False)  # written by the community from Level 3 material
     level: Mapped[int] = mapped_column(Integer, default=1)
     review_note: Mapped[str] = mapped_column(Text, default="")

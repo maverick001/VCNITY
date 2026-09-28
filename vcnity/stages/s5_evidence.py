@@ -7,7 +7,7 @@ local model is asked, strictly, whether the summary claims anything the quotes
 do not say. Either failing marks the theme `unsupported`, and unsupported
 themes never appear on the sign-off page.
 
-Themes agreed at stage 0 and themes written from Level 3 material are the
+Themes agreed at stage 1 and themes written from Level 3 material are the
 community's own words and may have no quotes at all; neither check applies.
 """
 from __future__ import annotations

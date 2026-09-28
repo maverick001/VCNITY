@@ -38,7 +38,7 @@ def included_themes(session, job_id: int) -> list[Theme]:
 
 
 def participants(session, job_id: int) -> int:
-    """The "of M": everyone who came, as the facilitator entered it at stage 0 (PRD A6)."""
+    """The "of M": everyone who came, as the facilitator entered it at stage 1 (PRD A6)."""
     return max(attendance_total(session.get(Job, job_id)), 1)
 
 
