@@ -5,7 +5,8 @@ from vcnity.stages import s8_report, s9_reportback
 
 
 def _job(db_session):
-    job = Job(name="FQI session", brief="P1: The community was invited to help.")
+    job = Job(name="FQI session", brief="P1: The community was invited to help.",
+              attendance=[{"session": "Mon", "count": 3}, {"session": "Tue", "count": 2}])
     db_session.add(job); db_session.flush()
     f = SourceFile(job_id=job.id, filename="a.m4a", kind="audio", level=2, level_confirmed_by_community=True,
                    path="x", sha256="0" * 64, provenance={"duration_s": 725.1})
@@ -19,7 +20,8 @@ def _job(db_session):
 
     def theme(label, status, members):
         t = Theme(job_id=job.id, label=label, summary=f"{label} summary.", status=status, level=2,
-                  decided_by="community" if status != "draft" else None, n_people=len(members))
+                  decided_by="community" if status != "draft" else None, n_people=len(members),
+                  people_count=len(members))
         db_session.add(t); db_session.flush()
         for m in members:
             db_session.add(ThemeQuote(theme_id=t.id, unit_id=units[m].id))
@@ -82,5 +84,31 @@ def test_reportback_plain_language(db_session, monkeypatch):
     assert seen["level"] == 2 and seen["redacted"] is True
     with pytest.raises(PermissionError):
         s9_reportback.send(db_session, rb.id)
-    s8_report.approve(db_session, rb.id, "community"); s8_report.approve(db_session, rb.id, "analyst")
+    s8_report.approve(db_session, rb.id, "community")
+    with pytest.raises(PermissionError):                 # the community's approval alone doesn't send it
+        s9_reportback.send(db_session, rb.id)
+    s8_report.approve(db_session, rb.id, "analyst")      # PRD stage 9: the analyst approves and sends
     assert s9_reportback.send(db_session, rb.id).sent is True
+
+
+def test_counts_come_from_the_analyst_and_attendance(db_session):
+    job = _job(db_session)
+    light = db_session.query(Theme).filter_by(job_id=job.id, label="Lighting").one()
+    light.people_count = 4                               # the analyst knows two voices were the same person, etc.
+    job.attendance = [{"session": "Mon", "count": 10}]
+    db_session.flush()
+    row = next(r for r in s8_report.theme_table(db_session, job.id) if r["label"] == "Lighting")
+    assert (row["n"], row["m"], row["pct"]) == (4, 10, 40)
+
+
+def test_theme_without_quotes_renders(db_session):
+    from vcnity.stages import s6_signoff
+
+    job = _job(db_session)
+    t = s6_signoff.add_theme(db_session, job.id, "Sacred site access", "People want a say.", [],
+                             from_level3=True, level=1)
+    t.people_count = 3
+    db_session.flush()
+    table = s8_report.theme_table(db_session, job.id)
+    md = s8_report.render_markdown(job, table, [], "")
+    assert "Sacred site access" in md and "no quotes" in md

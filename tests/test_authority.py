@@ -19,7 +19,7 @@ def _theme(db_session, n_people=2, level=1, text="the lights are broken"):
                  redacted_text=text, speaker_key=f"file:{f.id}:{i}", level=level)
         db_session.add(u); db_session.flush()
         db_session.add(ThemeQuote(theme_id=t.id, unit_id=u.id))
-    t.n_people = n_people
+    t.n_people = t.people_count = n_people
     db_session.flush()
     return job, t
 
@@ -85,3 +85,41 @@ def test_pii_flag_from_regex(db_session, monkeypatch):
     s7_identify.decide(db_session, flags[0].id, "keep", reason="number is a public helpline")
     assert db_session.get(Theme, t.id).status == "confirmed"
     assert s7_identify.open_flags(db_session, job.id) == []
+
+
+def test_level3_theme_needs_no_quote_and_is_always_flagged(db_session, monkeypatch):
+    job, t = _theme(db_session, n_people=3)
+    with pytest.raises(ValueError):
+        s6_signoff.add_theme(db_session, job.id, "x", "y", [], from_level3=True, level=3)
+    l3 = s6_signoff.add_theme(db_session, job.id, "Country and culture", "Written by the community.", [],
+                              from_level3=True, level=1)
+    assert l3.from_level3 and l3.status == "added" and l3.level == 1 and not l3.quotes
+    l3.people_count = 5
+    db_session.flush()
+    monkeypatch.setattr(s7_identify.router, "call",
+                        lambda session, **kw: json.dumps({"identifying": False, "why": ""}))
+    flags = [f for f in s7_identify.run(db_session, job.id) if f.theme_id == l3.id]
+    assert [f.kind for f in flags] == ["pii"] and "Level 3" in flags[0].detail
+
+
+def test_people_count_is_the_analysts_and_capped_by_attendance(db_session):
+    job, t = _theme(db_session)
+    job.attendance = [{"session": "one", "count": 6}]
+    db_session.flush()
+    with pytest.raises(PermissionError):
+        s6_signoff.set_people_count(db_session, t.id, 2, actor_role="community")
+    with pytest.raises(ValueError):
+        s6_signoff.set_people_count(db_session, t.id, 7, actor_role="analyst")
+    s6_signoff.review(db_session, t.id, actor_role="community", action="confirm")
+    s6_signoff.set_people_count(db_session, t.id, 5, actor_role="analyst")   # a count, not a meaning decision
+    assert t.people_count == 5 and t.status == "confirmed"
+
+
+def test_small_n_uses_the_hand_count_not_the_voices(db_session, monkeypatch):
+    job, t = _theme(db_session, n_people=1)               # one voice heard...
+    t.people_count = 4                                    # ...but the analyst counted four people
+    s6_signoff.review(db_session, t.id, actor_role="community", action="confirm")
+    monkeypatch.setattr(s7_identify, "settings", replace(s7_identify.settings, small_n=3))
+    monkeypatch.setattr(s7_identify.router, "call",
+                        lambda session, **kw: json.dumps({"identifying": False, "why": ""}))
+    assert s7_identify.run(db_session, job.id) == []

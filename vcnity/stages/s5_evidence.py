@@ -6,6 +6,9 @@ excluded (a file raised to Level 3 takes its quotes with it). Grounding: the
 local model is asked, strictly, whether the summary claims anything the quotes
 do not say. Either failing marks the theme `unsupported`, and unsupported
 themes never appear on the sign-off page.
+
+Themes agreed at stage 0 and themes written from Level 3 material are the
+community's own words and may have no quotes at all; neither check applies.
 """
 from __future__ import annotations
 
@@ -51,6 +54,8 @@ def run(session, job_id: int) -> dict:
     checked = 0
     for t in session.query(Theme).filter(Theme.job_id == job_id,
                                           Theme.status.notin_(("rejected", "cut"))).all():
+        if t.agreed_upfront or t.from_level3:
+            continue
         checked += 1
         if not check_structural(session, t.id):
             t.status = "unsupported"

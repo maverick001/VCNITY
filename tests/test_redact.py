@@ -1,4 +1,4 @@
-from vcnity.redact import redact
+from vcnity.redact import next_fake, pseudonymise, redact
 from vcnity.wordlist import as_hotwords, load_wordlist, person_names
 
 
@@ -28,3 +28,13 @@ def test_wordlist(tmp_path):
 
 def test_wordlist_missing_file(tmp_path):
     assert load_wordlist(tmp_path / "nope.txt") == []
+
+
+def test_pseudonymise_swaps_names_and_strips_details():
+    out = pseudonymise("Priya told PRIYA's friend Tom: ring 0412 345 678", {"Priya": "Alex", "Tom": "Sam"})
+    assert out == "Alex told Alex's friend Sam: ring [phone]"
+
+
+def test_next_fake_skips_real_names_and_taken_ones():
+    assert next_fake(set(), {"Priya"}) == "Alex"
+    assert next_fake({"Alex"}, {"Sam"}) == "Jordan"       # Alex taken, Sam is a real person in the job

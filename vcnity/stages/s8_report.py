@@ -2,7 +2,8 @@
 Community and analyst both approve before it leaves.
 
 Shape follows the client's own examples (Shape Your Ipswich): Background → How
-we engaged → What the community told us (a Theme | N of M (X%) table) →
+we engaged → What the community told us (a Theme | N of M (X%) table, N counted
+by the analyst, M the attendance entered at intake) →
 Findings → Sources. Only signed-off themes appear: confirmed, fixed, added —
 never rejected, cut, draft or unsupported. The findings narrative is drafted
 from the table alone, so it cannot say more than the community signed off on.
@@ -12,8 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..export import report_to_docx
-from ..models import Job, Report, SourceFile, Theme, Unit
+from ..models import Job, Report, SourceFile, Theme
 from ..providers import router
+from .s0_intake import attendance_total
 
 INCLUDED = ("confirmed", "fixed", "added")
 
@@ -32,21 +34,19 @@ PROMPT = (
 
 def included_themes(session, job_id: int) -> list[Theme]:
     return (session.query(Theme).filter(Theme.job_id == job_id, Theme.status.in_(INCLUDED))
-            .order_by(Theme.n_people.desc(), Theme.id).all())
+            .order_by(Theme.people_count.desc().nulls_last(), Theme.id).all())
 
 
 def participants(session, job_id: int) -> int:
-    keys = {k for (k,) in session.query(Unit.speaker_key)
-            .filter(Unit.job_id == job_id, Unit.excluded.is_(False)).distinct().all()}
-    return max(len(keys), 1)
+    """The "of M": everyone who came, as the facilitator entered it at stage 0 (PRD A6)."""
+    return max(attendance_total(session.get(Job, job_id)), 1)
 
 
 def theme_table(session, job_id: int) -> list[dict]:
     m = participants(session, job_id)
     rows = []
     for t in included_themes(session, job_id):
-        people = {tq.unit.speaker_key for tq in t.quotes if not tq.unit.excluded}
-        n = len(people)
+        n = t.people_count or 0  # the analyst's count by hand (PRD A6)
         rows.append({"id": t.id, "label": t.label, "n": n, "m": m, "pct": round(100 * n / m), "summary": t.summary,
                      "status": t.status, "quote_ids": [tq.unit_id for tq in t.quotes if not tq.unit.excluded]})
     return rows
@@ -87,7 +87,9 @@ def render_markdown(job: Job, table: list[dict], engaged: list[dict], findings: 
               _table_md(table) if table else "_No themes have been signed off yet._", "",
               "## Findings", "", findings.strip() or "_Not drafted yet._", "", "## Sources", ""]
     for r in table:
-        parts.append(f"- **{r['label']}** — quotes {', '.join('#' + str(q) for q in r['quote_ids'])}")
+        quotes = ", ".join("#" + str(q) for q in r["quote_ids"])
+        parts.append(f"- **{r['label']}** — " + (f"quotes {quotes}" if quotes else
+                                                  "no quotes: agreed with, or written by, the community"))
     parts.append("")
     parts.append("_Every theme above was confirmed by community reviewers before this report was drafted. "
                  "Quote numbers point at the job's evidence record; raw material never leaves the pipeline._")

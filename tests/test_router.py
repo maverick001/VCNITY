@@ -93,3 +93,12 @@ def test_call_records_the_model_actually_used(db_session, monkeypatch):
     assert seen["model"] == "qwen3-vl:4b"
     row = db_session.query(AICall).one()
     assert row.model == "qwen3-vl:4b"
+
+
+def test_name_scan_reads_level2_locally_only(db_session, monkeypatch):
+    monkeypatch.setattr(router, "_local", lambda model=None: Fake())
+    monkeypatch.setattr(router, "settings", replace(router.settings, allow_hosted=True))
+    assert router.call(db_session, job_id=1, stage=4, level=2, purpose="name-scan", prompt="x", name_scan=True) == "ok"
+    assert db_session.query(AICall).one().is_local is True
+    with pytest.raises(router.Level3NoAI):
+        router.call(db_session, job_id=1, stage=4, level=3, purpose="name-scan", prompt="x", name_scan=True)

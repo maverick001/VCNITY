@@ -1,16 +1,23 @@
-"""Stage 0 — Intake. Ties every file to a consent record and a sensitivity level.
+"""Stage 1 — Data Ingest, the people half (PRD §4 stage 0, Intake). Ties every file to a consent record and a sensitivity level.
 Nothing gets in without both.
 
 Levels only go up. The facilitator sets one on upload; the community can raise
 it any time; nothing lowers it. Nothing above Level 1 goes near AI until a
-community reviewer confirms the level (PRD A4).
+community reviewer confirms the level (PRD A9).
+
+Also here: how many people came to each session (the report's "of M", PRD A6),
+and the set of themes agreed with the community before anything is sorted
+(PRD A17).
+
+The conversion half (formats, provenance, pulling the words out) is s1_ingest,
+which the pipeline runs straight after this.
 """
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
 
-from ..models import ConsentRecord, Job, SourceFile
+from ..models import ConsentRecord, Job, Review, SourceFile, Theme
 
 KIND_BY_SUFFIX = {
     ".m4a": "audio", ".wav": "audio", ".mp3": "audio", ".mp4": "audio", ".aac": "audio", ".flac": "audio",
@@ -87,6 +94,51 @@ def confirm_level(session, file_id: int) -> SourceFile:
     sf.level_confirmed_by_community = True
     session.flush()
     return sf
+
+
+def set_attendance(session, job_id: int, sessions: list[dict]) -> Job:
+    """Replace the job's attendance: one row per session, entered by the facilitator."""
+    job = session.get(Job, job_id)
+    if job is None:
+        raise KeyError(job_id)
+    rows = []
+    for r in sessions:
+        name = str(r.get("session", "")).strip()
+        try:
+            count = int(r.get("count"))
+        except (TypeError, ValueError):
+            raise ValueError(f"attendance for '{name or '?'}' must be a whole number") from None
+        if not name:
+            raise ValueError("each attendance row needs a session name")
+        if count < 0:
+            raise ValueError("attendance can't be negative")
+        rows.append({"session": name, "count": count})
+    job.attendance = rows
+    session.flush()
+    return job
+
+
+def attendance_total(job: Job) -> int:
+    return sum(int(r.get("count", 0)) for r in (job.attendance or []))
+
+
+def add_agreed_theme(session, job_id: int, label: str, summary: str, *, level: int = 1,
+                     actor_role: str = "community") -> Theme:
+    """A theme agreed with the community before sorting. The community's words, so it starts signed off."""
+    if actor_role != "community":
+        raise PermissionError("the theme set is agreed with the community (PRD §4 stage 0)")
+    if level not in (1, 2):
+        raise ValueError("a theme's wording is Level 1 or 2; Level 3 wording can't go in a report")
+    if not label.strip():
+        raise ValueError("an agreed theme needs a label")
+    t = Theme(job_id=job_id, label=label.strip()[:200], summary=summary.strip(), status="confirmed",
+              decided_by="community", agreed_upfront=True, level=level)
+    session.add(t)
+    session.flush()
+    session.add(Review(theme_id=t.id, actor_role="community", action="agree",
+                       after={"label": t.label, "summary": t.summary, "status": t.status}))
+    session.flush()
+    return t
 
 
 def run(session, job_id: int) -> dict:

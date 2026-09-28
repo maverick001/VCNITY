@@ -17,10 +17,12 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
-from vcnity import audit, db, pipeline
+from vcnity import ask, audit, db, pipeline
 from vcnity.config import settings
-from vcnity.models import Artefact, Concern, IdentifyFlag, Job, Report, Segment, SourceFile, Theme, Unit
-from vcnity.stages import concerns, s0_intake, s2_transcribe, s6_signoff, s7_identify, s8_report, s9_reportback
+from vcnity.models import (Artefact, Concern, IdentifyFlag, Job, Pseudonym, Report, Segment, SourceFile, Theme,
+                           Unit)
+from vcnity.stages import (concerns, s0_intake, s2_transcribe, s4_themes, s6_signoff, s7_identify, s8_report,
+                           s9_reportback)
 from vcnity.wordlist import load_wordlist, person_names, save_wordlist
 
 RUNS: dict[int, dict] = {}  # job_id → {stage, started, finished, error, result}
@@ -31,8 +33,8 @@ _lock = threading.Lock()
 
 def _file(f: SourceFile) -> dict:
     return {"id": f.id, "filename": f.filename, "kind": f.kind, "level": f.level,
-            "confirmed": f.level_confirmed_by_community, "consent_id": f.consent_id,
-            "provenance": f.provenance or {}}
+            "confirmed": f.level_confirmed_by_community, "names_checked": f.names_checked,
+            "consent_id": f.consent_id, "provenance": f.provenance or {}}
 
 
 def _segment(s: Segment) -> dict:
@@ -42,7 +44,8 @@ def _segment(s: Segment) -> dict:
 
 def _theme(t: Theme) -> dict:
     return {"id": t.id, "label": t.label, "summary": t.summary, "status": t.status, "decided_by": t.decided_by,
-            "n_people": t.n_people, "level": t.level, "review_note": t.review_note,
+            "n_people": t.n_people, "people_count": t.people_count, "agreed_upfront": t.agreed_upfront,
+            "from_level3": t.from_level3, "level": t.level, "review_note": t.review_note,
             "quotes": [{"unit_id": q.unit_id, "text": q.unit.redacted_text, "speaker": q.unit.speaker_key,
                         "source_type": q.unit.source_type, "excluded": q.unit.excluded} for q in t.quotes]}
 
@@ -122,7 +125,23 @@ def create_app(testing: bool = False) -> Flask:
                 return _err("no such job", 404)
             files = s.query(SourceFile).filter_by(job_id=job_id).order_by(SourceFile.id).all()
             return jsonify({"id": j.id, "name": j.name, "brief": j.brief, "status": j.status,
+                            "attendance": j.attendance or [], "attendance_total": s0_intake.attendance_total(j),
                             "files": [_file(f) for f in files]})
+
+    @app.put("/jobs/<int:job_id>/attendance")
+    def set_attendance(job_id):
+        data = request.get_json(force=True) or {}
+        with db.session() as s:
+            j = s0_intake.set_attendance(s, job_id, data.get("sessions", []))
+            return jsonify({"attendance": j.attendance, "attendance_total": s0_intake.attendance_total(j)})
+
+    @app.post("/jobs/<int:job_id>/agreed-themes")
+    def add_agreed_theme(job_id):
+        data = request.get_json(force=True) or {}
+        with db.session() as s:
+            t = s0_intake.add_agreed_theme(s, job_id, data.get("label", ""), data.get("summary", ""),
+                                           level=int(data.get("level", 1)), actor_role=data.get("actor_role", ""))
+            return jsonify(_theme(t)), 201
 
     @app.post("/jobs/<int:job_id>/files")
     def upload(job_id):
@@ -191,6 +210,17 @@ def create_app(testing: bool = False) -> Flask:
         else:
             threading.Thread(target=_run_in_thread, args=(job_id, n, opts), daemon=True).start()
         return jsonify({"job_id": job_id, "stage": n, "started": True}), 202
+
+    @app.post("/jobs/<int:job_id>/reset")
+    def reset_job(job_id):
+        """Back to intake: every stage's output goes, the uploaded files and their consent/levels stay."""
+        with _lock:
+            r = RUNS.get(job_id)
+            if r and r["finished"] is None:
+                return _err(f"stage {r['stage']} is still running — wait for it to finish", 409)
+            RUNS.pop(job_id, None)
+        with db.session() as s:
+            return jsonify(pipeline.reset_job(s, job_id, exports_dir=settings.home / "exports"))
 
     @app.get("/jobs/<int:job_id>/status")
     def status(job_id):
@@ -279,8 +309,61 @@ def create_app(testing: bool = False) -> Flask:
     def add_theme(job_id):
         data = request.get_json(force=True)
         with db.session() as s:
-            t = s6_signoff.add_theme(s, job_id, data["label"], data.get("summary", ""), data.get("quote_unit_ids", []))
+            t = s6_signoff.add_theme(s, job_id, data["label"], data.get("summary", ""), data.get("quote_unit_ids", []),
+                                     from_level3=bool(data.get("from_level3")), level=int(data.get("level", 1)))
             return jsonify(_theme(t)), 201
+
+    @app.patch("/themes/<int:theme_id>/people")
+    def people_count(theme_id):
+        data = request.get_json(force=True)
+        with db.session() as s:
+            t = s6_signoff.set_people_count(s, theme_id, data["count"], actor_role=data.get("actor_role", ""))
+            return jsonify(_theme(t))
+
+    # ---- Level 2 names (stage 4) ----
+
+    def _names(s, job_id):
+        files = (s.query(SourceFile).filter_by(job_id=job_id, level=2).order_by(SourceFile.id).all())
+        units = s.query(Unit).filter_by(job_id=job_id, level=2, excluded=False).order_by(Unit.id).all()
+        return {
+            "names": [{"id": p.id, "real": p.real, "fake": p.fake, "source": p.source}
+                      for p in s.query(Pseudonym).filter_by(job_id=job_id).order_by(Pseudonym.id)],
+            "files": [{"id": f.id, "filename": f.filename, "names_checked": f.names_checked,
+                       "units": [{"id": u.id, "text": u.redacted_text} for u in units if u.file_id == f.id]}
+                      for f in files],
+            "waiting": s4_themes.waiting_name_check(s, job_id),
+        }
+
+    @app.get("/jobs/<int:job_id>/names")
+    def names(job_id):
+        with db.session() as s:
+            return jsonify(_names(s, job_id))
+
+    @app.post("/jobs/<int:job_id>/names")
+    def add_name(job_id):
+        data = request.get_json(force=True) or {}
+        with db.session() as s:
+            if s4_themes.add_name(s, job_id, data.get("real", ""), "person") is None:
+                return _err("that name is empty or already on the list", 400)
+            s4_themes.names_changed(s, job_id)
+            return jsonify(_names(s, job_id)), 201
+
+    @app.delete("/names/<int:name_id>")
+    def remove_name(name_id):
+        with db.session() as s:
+            p = s.get(Pseudonym, name_id)
+            if p is None:
+                return _err("not found", 404)
+            job_id = p.job_id
+            s.delete(p)
+            s.flush()
+            s4_themes.names_changed(s, job_id)
+            return jsonify(_names(s, job_id))
+
+    @app.post("/files/<int:file_id>/names-checked")
+    def names_checked(file_id):
+        with db.session() as s:
+            return jsonify(_file(s4_themes.set_names_checked(s, file_id)))
 
     @app.get("/jobs/<int:job_id>/units")
     def units(job_id):
@@ -331,6 +414,20 @@ def create_app(testing: bool = False) -> Flask:
     def send(report_id):
         with db.session() as s:
             return jsonify(_report(s9_reportback.send(s, report_id)))
+
+    # ---- chat with the data (PRD A19) ----
+
+    @app.post("/jobs/<int:job_id>/ask")
+    def ask_question(job_id):
+        data = request.get_json(force=True) or {}
+        with _lock:
+            r = RUNS.get(job_id)
+            if r and r["finished"] is None:
+                # the laptop can't hold the stage's model and the text model at once
+                return _err(f"stage {r['stage']} is running — ask again when it finishes", 409)
+        with db.session() as s:
+            return jsonify(ask.ask(s, job_id, data.get("question", ""), actor_role=data.get("actor_role", ""),
+                                   history=data.get("history") or []))
 
     # ---- concerns ----
 

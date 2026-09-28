@@ -35,6 +35,9 @@ class Job(Base):
     name: Mapped[str] = mapped_column(String(200))
     brief: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(50), default="new")
+    # How many people came to each session, entered by the facilitator: [{"session": str, "count": int}].
+    # The total is the "of M" in the report (PRD §4 stage 0, A6).
+    attendance: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     files: Mapped[list["SourceFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -62,6 +65,8 @@ class SourceFile(Base):
     kind: Mapped[str] = mapped_column(String(10))
     level: Mapped[int] = mapped_column(Integer)
     level_confirmed_by_community: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Level 2: a person has checked the made-up names before stage 4 sorts this file's material.
+    names_checked: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_id: Mapped[int | None] = mapped_column(ForeignKey("consent_records.id"), nullable=True)
     sha256: Mapped[str] = mapped_column(String(64))
     path: Mapped[str] = mapped_column(Text)
@@ -129,12 +134,27 @@ class Theme(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     decided_by: Mapped[str | None] = mapped_column(String(20), nullable=True)
     cluster_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    n_people: Mapped[int] = mapped_column(Integer, default=0)
+    n_people: Mapped[int] = mapped_column(Integer, default=0)  # distinct voices/files behind the quotes — a hint only
+    people_count: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the analyst's count by hand (PRD A6)
+    agreed_upfront: Mapped[bool] = mapped_column(Boolean, default=False)  # agreed with the community at stage 0
+    from_level3: Mapped[bool] = mapped_column(Boolean, default=False)  # written by the community from Level 3 material
     level: Mapped[int] = mapped_column(Integer, default=1)
     review_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     quotes: Mapped[list["ThemeQuote"]] = relationship(back_populates="theme", cascade="all, delete-orphan")
+
+
+class Pseudonym(Base):
+    """A real name in a job's Level 2 material and the made-up name that replaces it."""
+
+    __tablename__ = "pseudonyms"
+    __table_args__ = (CheckConstraint("source in ('wordlist','model','person')", name="ck_pseudonym_source"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
+    real: Mapped[str] = mapped_column(String(200))
+    fake: Mapped[str] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(10))
 
 
 class ThemeQuote(Base):

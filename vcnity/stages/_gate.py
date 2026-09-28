@@ -14,5 +14,5 @@ def why_not(sf) -> str:
     if sf.level >= 3:
         return "Level 3 — hand work only, no AI"
     if sf.level == 2 and not sf.level_confirmed_by_community:
-        return "Level 2 — waiting for a community reviewer to confirm the level (PRD A4)"
+        return "Level 2 — waiting for a community reviewer to confirm the level (PRD A9)"
     return ""

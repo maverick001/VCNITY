@@ -1,15 +1,19 @@
-"""Stage 2 — Transcription. Speech to text that copes with how people talk.
+"""Stage 2 — Audio Processing. Speech to text that copes with how people talk.
 
 Runs faster-whisper large-v3 twice per recording: once with the community word
 list, once without, so the §5 headline measure has something to show. The
 `with_wordlist` run is the one the rest of the pipeline uses.
 
-Segments the model is not sure about are flagged — "anything the AI isn't sure
-about goes to a person".
+Segments the model is not sure about — below the PRD A5 confidence, 0.6 by
+default — are flagged: "anything the AI isn't sure about goes to a person".
+
+Language is detected per segment, not once per file (PRD A4: each speaker keeps
+to one language or accent, but two speakers in one recording may differ).
 """
 from __future__ import annotations
 
 import math
+import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -21,10 +25,11 @@ from ._gate import ai_allowed, why_not
 
 import os
 
-# large-v3 is the recommendation for accented, code-switched, far-field audio.
+# large-v3 is the recommendation for accented, multilingual, far-field audio.
 # large-v3-turbo is ~4x faster and ~1 GB smaller if the laptop is short of RAM.
 ASR_MODEL = os.environ.get("VCNITY_ASR_MODEL", "large-v3")
-UNSURE_LOGPROB = -0.8
+# Segment confidence is exp(avg_logprob), so the PRD's confidence threshold is a log-prob of ln(threshold).
+UNSURE_LOGPROB = math.log(settings.unsure_confidence)
 UNSURE_NO_SPEECH = 0.6
 
 _model = None
@@ -53,6 +58,7 @@ def transcribe_wav(wav: Path, hotwords: str | None = None, initial_prompt: str |
         best_of=5,
         temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
         vad_filter=True,
+        multilingual=True,  # detect the language per segment, not once from the first 30 s
         vad_parameters={"min_silence_duration_ms": 500, "threshold": 0.35},
         condition_on_previous_text=False,
         compression_ratio_threshold=2.4,
@@ -141,7 +147,23 @@ def _text(session, file_id: int, variant: str) -> str:
     return " ".join(r.text for r in rows)
 
 
-def compare(session, file_id: int, reference: str | None = None) -> dict:
+def term_hits(reference: str, hypothesis: str, terms: list[str]) -> dict:
+    """How many word-list terms in the reference the transcript got right (PRD §5, first measure).
+
+    Each term counts once per time it occurs in the reference; the transcript is
+    credited with at most that many occurrences.
+    """
+    total = found = 0
+    for term in terms:
+        pat = re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
+        in_ref = len(pat.findall(reference))
+        total += in_ref
+        found += min(in_ref, len(pat.findall(hypothesis)))
+    return {"in_reference": total, "found": found,
+            "error_rate": round(1 - found / total, 4) if total else None}
+
+
+def compare(session, file_id: int, reference: str | None = None, terms: list[str] | None = None) -> dict:
     """What the word list changed — and, if a person pasted a reference, what it fixed."""
     without, with_ = _text(session, file_id, "without"), _text(session, file_id, "with_wordlist")
     a, b = without.split(), with_.split()
@@ -164,5 +186,8 @@ def compare(session, file_id: int, reference: str | None = None) -> dict:
     if reference and reference.strip():
         out["wer_without_vs_reference"] = round(wer(reference, without), 4)
         out["wer_with_vs_reference"] = round(wer(reference, with_), 4)
+        terms = load_wordlist(settings.wordlist_path) if terms is None else terms
+        out["wordlist_terms_without"] = term_hits(reference, without, terms)
+        out["wordlist_terms_with"] = term_hits(reference, with_, terms)
         out["note"] = "WER against the pasted human-corrected reference. Lower is better."
     return out

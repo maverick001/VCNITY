@@ -1,14 +1,17 @@
 """VCNITY pipeline UI — one page per PRD §4 stage, a role switch, an audit
-panel, and a 'raise a concern' button on every screen."""
+panel, and a 'Chat with Data' page, opened in its own tab, for the facilitator and analyst (PRD A19)."""
 from __future__ import annotations
 
 from typing import Any
 
 import reflex as rx
 
-from .state import ROLES, AppState
+from .state import ROLES, STAGE_INFO, AppState
 
 # ---------------------------------------------------------------- layout
+
+# Radix's blue scale, so it turns dark blue by itself in dark mode.
+PAGE_BG = "var(--blue-3)"
 
 
 def level_badge(level) -> rx.Component:
@@ -35,26 +38,121 @@ def status_badge(status) -> rx.Component:
     )
 
 
-def concern_dialog() -> rx.Component:
-    return rx.dialog.root(
-        rx.dialog.trigger(rx.button("Raise a concern", variant="soft", color_scheme="tomato")),
-        rx.dialog.content(
-            rx.dialog.title("Raise a concern"),
-            rx.dialog.description(
-                "Say what happened, in your own words. You don't have to pick a category — a person sorts it."),
+def origin_badge(t) -> rx.Component:
+    return rx.fragment(
+        rx.cond(t["agreed_upfront"], rx.badge("agreed at intake", color_scheme="teal"), rx.fragment()),
+        rx.cond(t["from_level3"], rx.badge("from Level 3 material — no quotes", color_scheme="red"), rx.fragment()))
+
+
+def chat_source(src) -> rx.Component:
+    return rx.vstack(
+        rx.text(src["line"], size="1", weight="bold", color="var(--accent-11)", word_break="break-word"),
+        rx.text(src["text"], size="2", color="gray"),
+        spacing="1", align="start", width="100%",
+        padding="8px 10px", border_left="2px solid var(--accent-6)", background_color="var(--gray-2)")
+
+
+def chat_message(m) -> rx.Component:
+    bubble = rx.box(
+        # The model writes a little markdown (bold, lists); show it as formatting, not asterisks.
+        rx.cond(m["role"] == "assistant",
+                rx.markdown(m["text"]),
+                rx.text(m["text"], size="3", white_space="pre-wrap")),
+        rx.cond(m["has_sources"],
+                rx.accordion.root(rx.accordion.item(
+                    header=rx.text(m["sources_header"], size="2"),
+                    content=rx.vstack(rx.foreach(m["sources"].to(list[dict[str, Any]]), chat_source),
+                                      spacing="2", align="start", width="100%")),
+                    collapsible=True, variant="ghost", width="100%", margin_top="8px"),
+                rx.fragment()),
+        padding="12px 16px", border_radius="12px",
+        max_width=rx.cond(m["role"] == "user", "75%", "100%"),
+        background_color=rx.match(m["role"], ("user", "var(--accent-4)"), ("error", "var(--red-3)"),
+                                  "var(--color-panel-solid)"))
+    return rx.hstack(bubble, width="100%",
+                     justify=rx.cond(m["role"] == "user", "end", "start"))
+
+
+def chat_button() -> rx.Component:
+    # Opens the chat in its own browser tab. Solid violet: the only filled button in the top bar,
+    # and a colour nothing else in the app uses.
+    return rx.link(rx.button(rx.icon("messages-square", size=16), "Chat with Data",
+                             rx.icon("external-link", size=14),
+                             variant="solid", color_scheme="violet", size="2", high_contrast=False,
+                             box_shadow="0 0 0 3px var(--violet-a4)", cursor="pointer"),
+                   href=AppState.chat_url, is_external=True)
+
+
+def chat_page() -> rx.Component:
+    return rx.vstack(
+        rx.vstack(
+            rx.hstack(
+                rx.icon("messages-square", size=22, color="var(--violet-11)"),
+                rx.heading("Chat with Data", size="5"),
+                rx.badge(AppState.job["name"].to(str), color_scheme="gray", size="2"),
+                rx.badge(rx.text("as ", AppState.role), color_scheme="violet", size="2"),
+                rx.spacer(),
+                rx.button(rx.icon("eraser", size=14), "Clear", size="2", variant="soft", color_scheme="gray",
+                          on_click=AppState.clear_chat, disabled=AppState.chat.length() == 0),
+                align="center", width="100%", spacing="3", wrap="wrap"),
+            rx.text("Answers come only from this job's material below Level 3, with sources. It won't say "
+                    "what anything means — that's the community's call at sign-off. Names in Level 2 "
+                    "material may appear as made-up stand-ins. Nothing is kept after you reload the page.",
+                    size="2", color="gray"),
+            width="100%", max_width="860px", spacing="2",
+            padding="20px 24px 16px", margin="0 auto"),
+        rx.box(
             rx.vstack(
-                rx.text_area(placeholder="What happened?", value=AppState.concern_text,
-                             on_change=AppState.set_concern_text, width="100%", rows="5"),
-                rx.hstack(rx.text("Which stage?"),
-                          rx.select([str(i) for i in range(10)], value=AppState.concern_stage,
-                                    on_change=AppState.set_concern_stage)),
+                rx.cond(~AppState.can_ask,
+                        rx.callout("Only the facilitator or the analyst can ask questions. Switch role on the "
+                                   "main page and open the chat again.", icon="lock", color_scheme="amber",
+                                   width="100%"),
+                        rx.fragment()),
+                rx.cond((AppState.message_kind == "error") & (AppState.message != ""),
+                        rx.callout(AppState.message, icon="triangle-alert", color_scheme="red", width="100%"),
+                        rx.fragment()),
+                rx.cond(AppState.chat.length() == 0,
+                        rx.center(rx.vstack(
+                            rx.icon("message-circle-question", size=36, color="var(--gray-8)"),
+                            rx.text("Ask about a topic, not a meaning. For example:", size="2", color="gray"),
+                            rx.text("“What did people say about public transport?”", size="2"),
+                            rx.text("“Where do people mention feeling unsafe?”", size="2"),
+                            align="center", spacing="2"), width="100%", padding_top="15vh"),
+                        rx.fragment()),
+                rx.foreach(AppState.chat, chat_message),
+                rx.cond(AppState.chat_busy,
+                        rx.hstack(rx.spinner(size="2"),
+                                  rx.text("Reading the material… this can take a minute", size="2",
+                                          color="gray"), align="center"),
+                        rx.fragment()),
+                rx.box(id="chat-end"),
+                spacing="4", width="100%", max_width="860px", margin="0 auto", padding="8px 24px 24px"),
+            flex="1", width="100%", overflow_y="auto",
+            border_top="1px solid var(--gray-5)"),
+        rx.box(
+            rx.form(
                 rx.hstack(
-                    rx.dialog.close(rx.button("Cancel", variant="soft")),
-                    rx.dialog.close(rx.button("Send", on_click=AppState.raise_concern)),
-                    spacing="3"),
-                spacing="3", width="100%"),
-        ),
-    )
+                    # A plain textarea, left uncontrolled: the text is read from the submitted form rather than
+                    # a debounced on_change. Enter sends and Shift+Enter adds a line. Written out here because
+                    # Reflex 0.9's enter_key_submit calls a helper it never imports into memoized components.
+                    # Enter while an input method is composing (e.g. Chinese) picks a character, not send.
+                    rx.el.textarea(name="question", rows=2,
+                                   custom_attrs={"on_key_down": rx.Var(
+                                       "(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing)"
+                                       " { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }")},
+                                   placeholder="Ask about the material…  (Enter to send, Shift+Enter for a new line)",
+                                   disabled=AppState.chat_busy | ~AppState.can_ask,
+                                   width="100%", padding="10px 12px", resize="none", font_size="var(--font-size-3)",
+                                   font_family="inherit", color="var(--gray-12)", background_color="var(--gray-a2)",
+                                   border="1px solid var(--gray-a7)", border_radius="var(--radius-3)",
+                                   _focus={"outline": "2px solid var(--accent-8)", "outline_offset": "-1px"}),
+                    rx.button(rx.icon("send", size=18), type="submit", size="4",
+                              disabled=AppState.chat_busy | ~AppState.can_ask),
+                    width="100%", align="end", spacing="3"),
+                on_submit=AppState.submit_question, reset_on_submit=True,
+                width="100%", max_width="860px", margin="0 auto", padding="16px 24px 20px"),
+            width="100%", border_top="1px solid var(--gray-5)", background_color="var(--color-panel-solid)"),
+        height="100vh", width="100%", spacing="0", background_color=PAGE_BG)
 
 
 def audit_panel() -> rx.Component:
@@ -72,33 +170,77 @@ def audit_panel() -> rx.Component:
         size="1", padding="12px 16px")
 
 
+def _nav_style(active):
+    return dict(width="100%", padding="7px 10px", border_radius="8px",
+                background_color=rx.cond(active, "var(--accent-4)", "transparent"),
+                color=rx.cond(active, "var(--accent-12)", "inherit"),
+                font_weight=rx.cond(active, "500", "normal"),
+                box_shadow=rx.cond(active, "inset 3px 0 0 var(--accent-9)", "none"),
+                transition="background-color 120ms",
+                _hover={"background_color": rx.cond(active, "var(--accent-4)", "var(--gray-4)")})
+
+
 def stage_nav() -> rx.Component:
+    def row(s):
+        return rx.hstack(
+            rx.cond(s["done"], rx.icon("circle-check", size=16, color="var(--green-9)", flex_shrink="0"),
+                    rx.icon("circle", size=16, color="var(--gray-8)", flex_shrink="0")),
+            rx.text(s["n"], " · ", s["name"], size="2", white_space="nowrap", overflow="hidden",
+                    text_overflow="ellipsis", min_width="0", title=s["name"]),
+            rx.spacer(),
+            rx.cond(s["is_waiting"],
+                    rx.tooltip(rx.icon("user-round-pen", size=15, color="var(--amber-10)", flex_shrink="0"),
+                               content="Waiting for a person: " + s["waiting"].to(str)),
+                    rx.fragment()),
+            spacing="2", align="center", width="100%")
+
     def item(s):
         active = AppState.router.page.path == s["route"]
-        return rx.link(
-            rx.hstack(
-                rx.cond(s["done"], rx.icon("circle-check", size=16, color="green"),
-                        rx.icon("circle", size=16, color="gray")),
-                rx.text(s["n"], " · ", s["name"], size="2"),
-                spacing="2", align="center"),
-            href=s["route"], underline="none", width="100%",
-            padding="6px 10px", border_radius="6px",
-            background_color=rx.cond(active, "var(--accent-4)", "transparent"),
-            color=rx.cond(active, "var(--accent-12)", "inherit"),
-            _hover={"background_color": rx.cond(active, "var(--accent-4)", "var(--gray-4)")})
+        return rx.cond(
+            s["has_route"],
+            rx.link(row(s), href=s["route"], underline="none", **_nav_style(active)),
+            rx.tooltip(rx.box(row(s), width="100%", padding="6px 10px", color="var(--gray-10)"),
+                       content="Runs in the background — no screen, nothing for a person to do"))
 
+    overview_active = AppState.router.page.path == "/pipeline"
     return rx.vstack(
-        rx.heading("VCNITY", size="5"),
-        rx.text("AI-assisted co-design analysis", size="1", color="gray"),
+        rx.hstack(
+            rx.center(rx.icon("waypoints", size=18, color="white"), background_color="var(--accent-9)",
+                      border_radius="8px", width="32px", height="32px", flex_shrink="0"),
+            rx.vstack(rx.heading("VCNITY", size="4", line_height="1"),
+                      rx.text("AI-assisted co-design analysis", size="1", color="gray"),
+                      spacing="1", align="start"),
+            spacing="3", align="center", padding_bottom="8px"),
         rx.divider(),
+        rx.link(rx.hstack(rx.icon("layout-list", size=16), rx.text("Overview", size="2"), spacing="2",
+                          align="center"),
+                href="/pipeline", underline="none", **_nav_style(overview_active)),
+        rx.text("Stages", size="1", color="gray", weight="medium", padding_left="10px", padding_top="6px"),
         rx.foreach(AppState.stage_names, item),
-        rx.divider(),
-        rx.link(rx.text("Concerns", size="2"), href="/concerns", underline="none",
-                width="100%", padding="6px 10px", border_radius="6px",
-                _hover={"background_color": "var(--gray-4)"}),
-        spacing="2", align="start", width="230px", min_width="230px", padding="20px",
-        background_color="var(--gray-2)",
-        border_right="1px solid var(--gray-5)", min_height="100vh")
+        rx.spacer(),
+        rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
+                  rx.text("waiting for a person", size="1", color="gray"), spacing="2", align="center"),
+        spacing="1", align="start", width="275px", min_width="275px", flex_shrink="0", padding="20px",
+        background_color="var(--color-panel-solid)", border_right="1px solid var(--blue-5)", min_height="100vh",
+        position="sticky", top="0")
+
+
+def stage_header(*ns: int) -> rx.Component:
+    """The PRD's pipeline row for this page: what the AI does, what a person does."""
+    def column(icon: str, title: str, idx: int) -> rx.Component:
+        lines = []
+        for n in ns:
+            text = STAGE_INFO[n][idx]
+            lines.append(rx.text(rx.text(f"{n} · ", as_="span", weight="bold") if len(ns) > 1 else "",
+                                 text, size="2", color="var(--gray-9)" if text == "—" else "inherit"))
+        return rx.vstack(rx.hstack(rx.icon(icon, size=16), rx.text(title, size="2", weight="bold"),
+                                   spacing="2", align="center"),
+                         *lines, spacing="1", align="start", width="100%")
+
+    return rx.grid(
+        rx.card(column("bot", "AI does", 0), variant="surface"),
+        rx.card(column("user-round", "A person does", 1), variant="surface"),
+        columns=rx.breakpoints(initial="1", sm="2"), spacing="3", width="100%")
 
 
 def top_bar(title: str) -> rx.Component:
@@ -111,9 +253,9 @@ def top_bar(title: str) -> rx.Component:
         rx.cond(AppState.jobs.length() > 1,
                 rx.select(AppState.job_options, value=AppState.job_id.to(str), on_change=AppState.select_job),
                 rx.fragment()),
-        concern_dialog(),
+        rx.cond(AppState.can_ask, chat_button(), rx.fragment()),
         width="100%", align="center", spacing="4", wrap="wrap",
-        padding_bottom="16px", border_bottom="1px solid var(--gray-5)")
+        padding_bottom="16px", border_bottom="1px solid var(--blue-6)")
 
 
 def message_bar() -> rx.Component:
@@ -138,7 +280,7 @@ def page(title: str, *children) -> rx.Component:
         stage_nav(),
         rx.vstack(top_bar(title), audit_panel(), message_bar(), *children,
                   spacing="4", width="100%", padding="32px", max_width="1200px"),
-        align="start", width="100%", spacing="0")
+        align="start", width="100%", spacing="0", min_height="100vh", background_color=PAGE_BG)
 
 
 # ---------------------------------------------------------------- 0 intake
@@ -210,12 +352,93 @@ def upload_card() -> rx.Component:
         spacing="3", align="start", width="100%")
 
 
+def attendance_card() -> rx.Component:
+    return rx.card(
+        rx.heading("Who came", size="3"),
+        rx.text("How many people came to each session. The total is the 'of M' in the report's "
+                "'N of M participants' (PRD A6). The facilitator enters it.", size="1", color="gray"),
+        rx.foreach(AppState.attendance, lambda r: rx.hstack(
+            rx.text(r["line"], size="2"),
+            rx.cond(AppState.role == "facilitator",
+                    rx.button("Remove", size="1", variant="soft", on_click=AppState.remove_attendance(r["i"])),
+                    rx.fragment()),
+            align="center")),
+        rx.text(AppState.attendance_total_text, size="2", weight="bold"),
+        rx.cond(AppState.role == "facilitator",
+                rx.hstack(
+                    rx.input(value=AppState.att_session, on_change=AppState.set_att_session,
+                             placeholder="Session, e.g. Tue 3 Sep, Goodna", width="240px"),
+                    rx.input(value=AppState.att_count, on_change=AppState.set_att_count, placeholder="People",
+                             width="90px"),
+                    rx.button("Add", size="2", on_click=AppState.add_attendance), align="center"),
+                rx.fragment()),
+        spacing="2", width="100%")
+
+
+def agreed_card() -> rx.Component:
+    return rx.card(
+        rx.heading("Themes agreed with the community", size="3"),
+        rx.text("Agreed before anything is sorted (PRD A17). Stage 4 sorts every bit of material into these, and "
+                "suggests new themes for anything that doesn't fit.", size="1", color="gray"),
+        rx.foreach(AppState.agreed_themes, lambda t: rx.hstack(
+            rx.text(t["label"], weight="bold", size="2"), rx.text(t["summary"], size="2", color="gray"),
+            status_badge(t["status"]), align="center", wrap="wrap")),
+        rx.cond(AppState.role == "community",
+                rx.vstack(
+                    rx.input(value=AppState.agreed_label, on_change=AppState.set_agreed_label, placeholder="Theme",
+                             width="100%"),
+                    rx.text_area(value=AppState.agreed_summary, on_change=AppState.set_agreed_summary,
+                                 placeholder="What it covers, in the community's words", rows="2", width="100%"),
+                    rx.hstack(rx.text("Level of the wording", size="1", color="gray"),
+                              rx.select(["1", "2"], value=AppState.agreed_level, on_change=AppState.set_agreed_level,
+                                        size="1"),
+                              rx.button("Agree theme", size="2", on_click=AppState.add_agreed_theme), align="center"),
+                    width="100%"),
+                rx.text("A community reviewer adds these. Switch role at the top.", size="1", color="gray")),
+        spacing="2", width="100%")
+
+
+def levels_card() -> rx.Component:
+    def row(level: int, whats_in: str, allowed: str) -> rx.Component:
+        return rx.table.row(rx.table.cell(level_badge(rx.Var.create(level))),
+                            rx.table.cell(whats_in, white_space="normal"),
+                            rx.table.cell(allowed, white_space="normal"))
+
+    return rx.card(
+        rx.heading("Sensitivity levels", size="3"),
+        rx.text("Set on upload. The community can raise a level any time; nothing lowers it. Not sure? Go up a "
+                "level. Nothing above Level 1 goes near AI until a community reviewer confirms it.",
+                size="1", color="gray"),
+        rx.table.root(
+            rx.table.header(rx.table.row(rx.table.column_header_cell("Level", width="190px"),
+                                         rx.table.column_header_cell("What's in it", width="38%"),
+                                         rx.table.column_header_cell("What's allowed"))),
+            rx.table.body(
+                row(1, "General comments about places, services, surroundings", "AI can analyse it"),
+                row(2, "Personal experience, health and wellbeing, anything tied to a known group",
+                    "AI only after real names are swapped for made-up ones, and a person checks. Transcription "
+                    "and photo description are the exception"),
+                row(3, "First Nations cultural knowledge, disclosures of harm, anything the community restricts",
+                    "No AI at all. People transcribe it by hand. A theme the community writes from it can reach "
+                    "the client, never the material")),
+            size="1", width="100%", style={"table_layout": "fixed"}),
+        width="100%")
+
+
+def wordlist_card() -> rx.Component:
+    return rx.card(
+        rx.heading("Community word list", size="3"),
+        rx.text("Names, slang, local place words — one per line. Add @person after a name so Level 2 material gets "
+                "a made-up name for it. Re-run this stage after saving.", size="1", color="gray"),
+        rx.text_area(value=AppState.wordlist_text, on_change=AppState.set_wordlist_text, rows="6", width="100%"),
+        rx.button("Save word list", on_click=AppState.save_wordlist, size="2"),
+        width="100%")
+
+
 def intake_page() -> rx.Component:
     return page(
-        "0 · Intake",
-        rx.text("Every file gets a consent record and a sensitivity level. Nothing gets in without both. "
-                "Levels only go up. Nothing above Level 1 goes near AI until a community reviewer confirms it.",
-                color="gray"),
+        "1 · Data Ingest",
+        stage_header(1),
         rx.cond(AppState.has_waiting_level2,
                 rx.callout(rx.text("Waiting for a community reviewer to confirm: ", AppState.waiting_level2_text),
                            icon="clock", color_scheme="amber", width="100%"),
@@ -230,16 +453,16 @@ def intake_page() -> rx.Component:
                     rx.table.body(rx.foreach(AppState.files, file_row)),
                     width="100%")),
         rx.cond((AppState.role == "facilitator") & (AppState.job_id != 0), upload_card(), rx.fragment()),
+        levels_card(),
+        rx.cond(AppState.job_id != 0,
+                rx.grid(attendance_card(), agreed_card(), columns=rx.breakpoints(initial="1", md="2"), spacing="4",
+                        width="100%"),
+                rx.fragment()),
         rx.card(
             rx.heading("Brief", size="3"),
-            rx.text(AppState.job_brief, white_space="pre-wrap", size="2"),
-            width="100%"),
-        rx.card(
-            rx.heading("Community word list", size="3"),
-            rx.text("Names, slang, local place words. One per line. Add @person after a name so Level 2 redaction removes it.",
-                    size="1", color="gray"),
-            rx.text_area(value=AppState.wordlist_text, on_change=AppState.set_wordlist_text, rows="8", width="100%"),
-            rx.button("Save word list", on_click=AppState.save_wordlist, size="2"),
+            rx.text(rx.cond(AppState.job_brief != "", AppState.job_brief,
+                            "Filled in from the client's spreadsheet when stage 1 runs."),
+                    white_space="pre-wrap", size="2"),
             width="100%"),
     )
 
@@ -249,13 +472,21 @@ def intake_page() -> rx.Component:
 def stage_card(s) -> rx.Component:
     return rx.card(
         rx.hstack(
-            rx.cond(s["done"], rx.icon("circle-check", color="green"), rx.icon("circle", color="gray")),
-            rx.vstack(rx.text(s["n"], " · ", s["name"], weight="bold"),
-                      rx.hstack(
-                          rx.badge(rx.cond(s["done"], "done", "not run yet"), color_scheme="gray"),
-                          rx.link("view", href=s["route"], size="1", color="var(--gray-11)"),
-                          spacing="2", align="center"),
-                      spacing="0"),
+            rx.cond(s["done"], rx.icon("circle-check", color="var(--green-9)"), rx.icon("circle", color="gray")),
+            rx.vstack(rx.hstack(rx.text(s["n"], " · ", s["name"], weight="bold"),
+                                rx.badge(rx.cond(s["done"], "done", "not run yet"), color_scheme="gray"),
+                                rx.cond(s["is_waiting"],
+                                        rx.badge(rx.icon("user-round-pen", size=12), "waiting: ", s["waiting"],
+                                                 color_scheme="amber"),
+                                        rx.fragment()),
+                                rx.cond(s["has_route"],
+                                        rx.link("open", href=s["route"], size="1", color="var(--gray-11)"),
+                                        rx.fragment()),
+                                spacing="2", align="center", wrap="wrap"),
+                      rx.text(rx.text("AI: ", as_="span", weight="medium"), s["ai"], size="1", color="gray"),
+                      rx.text(rx.text("Person: ", as_="span", weight="medium"), s["person"], size="1",
+                              color="gray"),
+                      spacing="1", align="start"),
             rx.spacer(),
             rx.button("Run", size="1", variant="outline", on_click=AppState.run_stage(s["n"]),
                       disabled=AppState.running),
@@ -263,11 +494,40 @@ def stage_card(s) -> rx.Component:
         width="100%")
 
 
+def reset_card() -> rx.Component:
+    return rx.card(
+        rx.hstack(
+            rx.vstack(
+                rx.text("Reset this job", weight="bold"),
+                rx.text("Back to intake: transcripts, artefact readings, themes, sign-off, flags, counts, names and "
+                        "reports are removed. The uploaded files, their consent and levels stay.", size="1",
+                        color="gray"),
+                spacing="1", align="start"),
+            rx.spacer(),
+            rx.alert_dialog.root(
+                rx.alert_dialog.trigger(rx.button("Reset job", color_scheme="red", variant="soft",
+                                                  disabled=AppState.running)),
+                rx.alert_dialog.content(
+                    rx.alert_dialog.title("Reset this job to intake?"),
+                    rx.alert_dialog.description(
+                        "Everything the stages produced goes, including sign-off decisions and reports. This can't "
+                        "be undone. Audio Processing (stage 2) is slow and will have to run again."),
+                    rx.hstack(
+                        rx.alert_dialog.cancel(rx.button("Cancel", variant="soft")),
+                        rx.alert_dialog.action(rx.button("Reset", color_scheme="red", on_click=AppState.reset_job)),
+                        spacing="3", justify="end", margin_top="16px"),
+                ),
+            ),
+            align="center", width="100%"),
+        width="100%")
+
+
 def pipeline_page() -> rx.Component:
     return page(
         "Pipeline overview",
-        rx.text("Every stage can be re-run live. AI stages refuse to run while a Level 2 file is unconfirmed, "
-                "and stage 8 refuses while an identifiability flag is undecided.", color="gray"),
+        rx.text("The stages of PRD §4, in order. Every stage can be re-run. AI stages refuse to run while a "
+                "Level 2 file is unconfirmed; stage 4 waits for the name check; stages 7 and 8 wait for "
+                "attendance and people counts; stage 8 waits for every identifiability flag.", color="gray"),
         rx.cond(AppState.running,
                 rx.callout(rx.text("Stage ", AppState.run_stage_text, " is running — ",
                                     AppState.run_elapsed_text, " elapsed. This page polls every 3 s."),
@@ -275,6 +535,7 @@ def pipeline_page() -> rx.Component:
                 rx.fragment()),
         rx.foreach(AppState.stage_names, stage_card),
         rx.card(rx.heading("Job status", size="3"), rx.text(AppState.status_line, size="2"), width="100%"),
+        reset_card(),
         rx.moment(interval=3000, on_change=AppState.poll, display="none"),
     )
 
@@ -301,7 +562,9 @@ def diff_chunk(d) -> rx.Component:
 
 def transcript_page() -> rx.Component:
     return page(
-        "2 · Transcription",
+        "2 · Audio Processing",
+        stage_header(2),
+        wordlist_card(),
         rx.hstack(
             rx.text("Recording:"),
             rx.select(AppState.audio_options, value=AppState.selected_file_id.to(str), on_change=AppState.select_file),
@@ -317,6 +580,7 @@ def transcript_page() -> rx.Component:
             rx.hstack(rx.button("Compute WER", size="1", on_click=AppState.compute_wer),
                       rx.cond(AppState.has_reference_wer,
                               rx.text(AppState.reference_wer_line, size="2", weight="bold"), rx.fragment())),
+            rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
             width="100%"),
         rx.hstack(
             rx.card(rx.heading("With word list (used downstream)", size="3"),
@@ -359,7 +623,8 @@ def artefact_card(a) -> rx.Component:
 
 def artefacts_page() -> rx.Component:
     return page(
-        "3 · Things people made",
+        "3 · Image Processing",
+        stage_header(3),
         rx.text("The model reads what is physically written and describes what is in the frame. It is told never to "
                 "say what anything means. Meaning comes from what the maker said — the last field on each card.",
                 color="gray"),
@@ -378,7 +643,7 @@ def quote_row(q) -> rx.Component:
 def theme_card(t, actions: bool = False) -> rx.Component:
     body = [
         rx.hstack(rx.heading(t["label"], size="4"), status_badge(t["status"]), level_badge(t["level"]),
-                  rx.badge(t["people_text"], color_scheme="gray"), align="center", wrap="wrap"),
+                  origin_badge(t), rx.badge(t["people_text"], color_scheme="gray"), align="center", wrap="wrap"),
         rx.text(t["summary"], size="2"),
         rx.accordion.root(rx.accordion.item(
             header=rx.text(t["quotes_header"]),
@@ -392,11 +657,50 @@ def theme_card(t, actions: bool = False) -> rx.Component:
     return rx.card(rx.vstack(*body, spacing="2", align="start", width="100%"), width="100%")
 
 
+def names_file(f) -> rx.Component:
+    return rx.card(
+        rx.hstack(rx.text(f["filename"], weight="bold", size="2"),
+                  rx.cond(f["names_checked"], rx.badge("names checked", color_scheme="green"),
+                          rx.button("Names are right", size="1", on_click=AppState.mark_names_checked(f["id"]))),
+                  align="center"),
+        rx.accordion.root(rx.accordion.item(
+            header=rx.text(f["units_header"], size="2"),
+            content=rx.vstack(rx.foreach(f["units"].to(list[dict[str, Any]]), lambda u: rx.text(u["line"], size="1")),
+                              spacing="1", max_height="260px", overflow_y="auto")),
+            collapsible=True, variant="ghost", width="100%"),
+        width="100%")
+
+
+def names_card() -> rx.Component:
+    return rx.card(
+        rx.heading("Level 2: made-up names", size="3"),
+        rx.text("Real names in Level 2 material are swapped for made-up ones before sorting. The list comes from the "
+                "word list's @person entries and the local model. Read what sorting will see, add any name that "
+                "slipped through, remove anything that isn't a name, then mark each file.", size="1", color="gray"),
+        rx.foreach(AppState.names, lambda n: rx.hstack(
+            rx.text(n["line"], size="2"),
+            rx.button("Remove", size="1", variant="soft", on_click=AppState.remove_name(n["id"])), align="center")),
+        rx.hstack(rx.input(value=AppState.new_name, on_change=AppState.set_new_name, placeholder="A name we missed",
+                           width="240px"),
+                  rx.button("Add name", size="2", on_click=AppState.add_name), align="center"),
+        rx.foreach(AppState.name_files, names_file),
+        spacing="2", width="100%")
+
+
 def themes_page() -> rx.Component:
     return page(
         "4 · Draft themes  ·  5 · Evidence check",
-        rx.text("Quotes come from the clustering, not from the model — it only labels each group from its quotes. "
-                "The evidence check hides any theme whose summary says more than its quotes do.", color="gray"),
+        stage_header(4, 5),
+        rx.text("Material is sorted into the themes agreed at intake; anything that doesn't fit is grouped into "
+                "suggested themes. Quotes come from the sorting, not from the model — it only labels a new group "
+                "from its quotes. The evidence check hides any suggested theme whose summary says more than its "
+                "quotes do.", color="gray"),
+        rx.cond(AppState.has_waiting_names,
+                rx.callout(rx.text("Stage 4 won't sort until a person checks the made-up names on: ",
+                                   AppState.waiting_names_text),
+                           icon="user-check", color_scheme="amber", width="100%"),
+                rx.fragment()),
+        rx.cond(AppState.has_name_files, names_card(), rx.fragment()),
         rx.hstack(rerun_button(4, "Re-run 4 · draft themes"), rerun_button(5, "Re-run 5 · evidence check")),
         rx.cond(AppState.unsupported_count > 0,
                 rx.callout(rx.text(AppState.unsupported_count,
@@ -447,6 +751,7 @@ def signoff_actions(t) -> rx.Component:
 def signoff_page() -> rx.Component:
     return page(
         "6 · Community sign-off",
+        stage_header(6),
         rx.callout("When the community and the analyst disagree about what material means, the community decides. "
                    "That isn't negotiable.", icon="scale", width="100%"),
         rx.foreach(AppState.themes, lambda t: theme_card(t, actions=True)),
@@ -455,8 +760,19 @@ def signoff_page() -> rx.Component:
                         rx.input(value=AppState.add_label, on_change=AppState.set_add_label, placeholder="Label", width="100%"),
                         rx.text_area(value=AppState.add_summary, on_change=AppState.set_add_summary,
                                      placeholder="What it says", rows="2", width="100%"),
-                        rx.input(value=AppState.add_quote_ids, on_change=AppState.set_add_quote_ids,
-                                 placeholder="Quote ids behind it, e.g. 12 15 (from the list below)", width="100%"),
+                        rx.hstack(rx.checkbox("Written from Level 3 material (transcribed by hand, no quotes)",
+                                              checked=AppState.add_from_level3,
+                                              on_change=AppState.set_add_from_level3),
+                                  align="center"),
+                        rx.cond(AppState.add_from_level3,
+                                rx.hstack(rx.text("Level of the wording — it can reach the client, the material never "
+                                                  "does", size="1", color="gray"),
+                                          rx.select(["1", "2"], value=AppState.add_level,
+                                                    on_change=AppState.set_add_level, size="1"),
+                                          align="center"),
+                                rx.input(value=AppState.add_quote_ids, on_change=AppState.set_add_quote_ids,
+                                         placeholder="Quote ids behind it, e.g. 12 15 (from the list below)",
+                                         width="100%")),
                         rx.button("Add theme", size="2", on_click=AppState.add_theme),
                         rx.accordion.root(rx.accordion.item(
                             header=rx.text("All quotable material"),
@@ -494,11 +810,35 @@ def flag_row(f) -> rx.Component:
         width="100%")
 
 
+def count_row(t) -> rx.Component:
+    return rx.hstack(
+        rx.text(t["label"], weight="bold", size="2", min_width="240px"), origin_badge(t),
+        rx.text(t["n_people"], " voices heard", size="1", color="gray"),
+        rx.cond(AppState.role == "analyst",
+                rx.input(default_value=t["count_text"], placeholder="People", width="90px", size="1",
+                         on_blur=lambda v: AppState.set_people_count(t["id"], v)),
+                rx.text(rx.cond(t["count_text"].to(str) != "", t["count_text"], "not counted"), size="2")),
+        align="center", wrap="wrap", width="100%")
+
+
 def identify_page() -> rx.Component:
     return page(
-        "7 · Could anyone be identified?",
-        rx.text("Themes from very few people, and anything that gives someone away. The analyst decides what to cut "
-                "and writes down why — stage 8 will not run until every flag has a decision.", color="gray"),
+        "7 · Security Check",
+        stage_header(7),
+        rx.text("Themes from very few people, and anything that gives someone away. The analyst counts the people "
+                "behind each theme by hand — the app can't tell the same person apart across recordings (PRD A6). "
+                "Then the flags run. The analyst decides what to cut and writes down why — stage 8 will not run "
+                "until every flag has a decision.", color="gray"),
+        rx.card(
+            rx.heading("People behind each theme", size="3"),
+            rx.text("Out of ", AppState.attendance_total_text, " (entered at intake). Type a count and click away "
+                    "to save it.", size="1", color="gray"),
+            rx.foreach(AppState.signed_off_themes, count_row),
+            rx.cond(AppState.has_uncounted,
+                    rx.callout(rx.text("Not counted yet: ", AppState.uncounted_text), icon="clock",
+                               color_scheme="amber", size="1"),
+                    rx.fragment()),
+            spacing="2", width="100%"),
         rerun_button(7, "Re-run flags"),
         rx.cond(AppState.flags.length() == 0, rx.text("No flags yet.", color="gray"), rx.fragment()),
         rx.foreach(AppState.flags, flag_row),
@@ -520,7 +860,8 @@ def approvals(r) -> rx.Component:
 
 def report_page() -> rx.Component:
     return page(
-        "8 · Report",
+        "8 · Reporting",
+        stage_header(8),
         rx.text("Shaped like the client's own engagement reports: background, how we engaged, a theme table with "
                 "'N of M participants', findings. Only signed-off themes appear. Both approvals before it leaves.",
                 color="gray"),
@@ -540,58 +881,29 @@ def report_page() -> rx.Component:
 def reportback_page() -> rx.Component:
     return page(
         "9 · Report back",
-        rx.text("A plain-language version for the people who took part. Same two approvals; 'send' only marks it "
-                "sent in this prototype.", color="gray"),
+        stage_header(9),
+        rx.text("A plain-language version for the people who took part. The analyst approves and sends it; "
+                "'send' only marks it sent in this prototype. When it goes out, ask participants one yes/no "
+                "question: does this match what you said? (PRD §5)", color="gray"),
         rerun_button(9, "Re-draft report-back"),
         rx.cond(AppState.has_reportback,
                 rx.vstack(
                     approvals(AppState.reportback),
                     rx.cond(AppState.reportback["sent"], rx.badge("sent", color_scheme="green"),
                             rx.button("Send to participants", on_click=AppState.send_reportback,
-                                      disabled=~AppState.can_send)),
+                                      disabled=~AppState.can_send | (AppState.role != "analyst"))),
                     rx.card(rx.markdown(AppState.reportback["markdown"].to(str)), width="100%"),
                     width="100%", align="start"),
                 rx.text("Not drafted yet.", color="gray")),
     )
 
 
-# ---------------------------------------------------------------- concerns
-
-def concern_row(c) -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.hstack(rx.badge(c["stage_text"]), rx.badge(c["status"], color_scheme="gray"),
-                      rx.cond(c["category"], rx.badge(c["category"], color_scheme="tomato"), rx.fragment()),
-                      align="center"),
-            rx.text(c["text"], size="2"),
-            rx.cond(c["routed_text"].to(str) != "",
-                    rx.text(c["routed_text"], size="1"),
-                    rx.cond(AppState.role == "analyst",
-                            rx.hstack(rx.text("Sort as:", size="1"),
-                                      rx.button("harm", size="1", variant="soft", on_click=AppState.sort_concern(c["id"], "harm")),
-                                      rx.button("misuse", size="1", variant="soft", on_click=AppState.sort_concern(c["id"], "misuse")),
-                                      rx.button("conduct", size="1", variant="soft", on_click=AppState.sort_concern(c["id"], "conduct")),
-                                      rx.button("ai_error", size="1", variant="soft", on_click=AppState.sort_concern(c["id"], "ai_error")),
-                                      wrap="wrap"),
-                            rx.text("A person will sort this.", size="1", color="gray"))),
-            align="start", spacing="2"),
-        width="100%")
-
-
-def concerns_page() -> rx.Component:
-    return page(
-        "Concerns",
-        rx.text("One obvious way to raise something, from any stage, in the person's own words. They describe what "
-                "happened; a person sorts it. Harm → a named person, same day (PRD A13 — still UNSET).", color="gray"),
-        rx.foreach(AppState.concerns, concern_row),
-    )
-
-
 # ---------------------------------------------------------------- app
 
-app = rx.App(theme=rx.theme(accent_color="teal", radius="medium"))
+# Slate greys are blue-tinted, so they sit well on the light blue page; solid panels keep cards white on it.
+app = rx.App(theme=rx.theme(accent_color="teal", gray_color="slate", radius="large", panel_background="solid"))
 for route, component in [("/", intake_page), ("/pipeline", pipeline_page), ("/transcript", transcript_page),
                          ("/artefacts", artefacts_page), ("/themes", themes_page), ("/signoff", signoff_page),
-                         ("/identify", identify_page), ("/report", report_page), ("/reportback", reportback_page),
-                         ("/concerns", concerns_page)]:
+                         ("/identify", identify_page), ("/report", report_page), ("/reportback", reportback_page)]:
     app.add_page(component, route=route, on_load=AppState.load_all, title="VCNITY pipeline")
+app.add_page(chat_page, route="/chat", on_load=AppState.load_chat, title="Chat with Data · VCNITY")

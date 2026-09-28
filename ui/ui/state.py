@@ -1,6 +1,7 @@
 """One state for the whole UI. Every handler talks to the API and reloads."""
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -10,8 +11,34 @@ from . import api_client as api
 from .api_client import ApiError
 
 ROLES = ["facilitator", "community", "analyst", "client"]
-STAGE_ROUTES = {0: "/", 1: "/pipeline", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
+# Stage 1 is Data Ingest: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
+STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
+# Left out of the sidebar and Overview. Report back isn't on the client's slides; it stays reachable at
+# /reportback until the client says what slide 11's "reporting function" means (PRD A14).
+HIDDEN_STAGES = {9}
+
+# PRD v1.1 §4, the pipeline table: what the AI does and what a person does at each stage.
+STAGE_INFO = {
+    1: ("Converts formats and records where each file came from. Pulls the words out of slides, Word and "
+        "text files.",
+        "Ties every file to a consent record and a sensitivity level — nothing gets in without both. "
+        "Enters who came to each session, and agrees the set of themes with the community."),
+    2: ("Speech to text, works out who's speaking, copes with different languages and accents, and scores how "
+        "sure it is.", "The community gives a word list — names, slang, local place words. Anything below 0.6 "
+                       "confidence goes to a person."),
+    3: ("Describes what's in the photo, nothing more.",
+        "Meaning comes from what the maker said about their own work. AI never guesses what art means."),
+    4: ("For Level 2, swaps real names for made-up ones. Sorts material into the agreed themes and suggests new "
+        "draft themes for the rest.", "A person checks the swapped names on Level 2 before sorting starts."),
+    5: ("Checks every claim traces to a real quote and throws out the ones that don't.", "—"),
+    6: ("—", "The community confirms, fixes, rejects, or adds what we missed. What they say goes."),
+    7: ("Flags themes that come from very few people, and anything that gives someone away.",
+        "The analyst counts the people behind each theme by hand, decides what to cut, and writes down why."),
+    8: ("Drafts recommendations against the brief.",
+        "The analyst edits. Community and analyst both approve before it leaves."),
+    9: ("Drafts a plain-language version for participants.", "The analyst approves and sends it."),
+}
 
 
 class AppState(rx.State):
@@ -38,6 +65,17 @@ class AppState(rx.State):
     upload_consent_scope: str = ""
     uploading: bool = False
     upload_error: str = ""
+    attendance: list[dict[str, Any]] = []
+    att_session: str = ""
+    att_count: str = ""
+    agreed_label: str = ""
+    agreed_summary: str = ""
+    agreed_level: str = "1"
+
+    # Level 2 names (stage 4)
+    names: list[dict[str, Any]] = []
+    name_files: list[dict[str, Any]] = []
+    new_name: str = ""
 
     # transcript
     audio_files: list[dict[str, Any]] = []
@@ -64,6 +102,8 @@ class AppState(rx.State):
     add_label: str = ""
     add_summary: str = ""
     add_quote_ids: str = ""
+    add_from_level3: bool = False
+    add_level: str = "1"
 
     # identify
     flags: list[dict[str, Any]] = []
@@ -74,11 +114,16 @@ class AppState(rx.State):
     client_report: dict[str, Any] = {}
     reportback: dict[str, Any] = {}
 
-    # concerns
+    # concerns (no UI to raise one for now; kept so earlier concerns still load)
     concerns: list[dict[str, Any]] = []
     concern_text: str = ""
     concern_stage: str = "0"
     concern_open: bool = False
+
+    # chat with the data (PRD A19) — kept only until the page reloads
+    chat: list[dict[str, Any]] = []
+    chat_input: str = ""
+    chat_busy: bool = False
 
     # ---------- helpers ----------
 
@@ -106,8 +151,17 @@ class AppState(rx.State):
 
     @rx.var
     def can_send(self) -> bool:
-        r = self.reportback
-        return bool(r) and bool(r.get("approved_community")) and bool(r.get("approved_analyst")) and not r.get("sent")
+        r = self.reportback  # PRD stage 9: the analyst approves and sends it
+        return bool(r) and bool(r.get("approved_analyst")) and not r.get("sent")
+
+    @rx.var
+    def can_ask(self) -> bool:
+        return self.role in ("facilitator", "analyst") and bool(self.job_id)
+
+    @rx.var
+    def chat_url(self) -> str:
+        # A new tab starts with fresh state, so the job and role travel in the link.
+        return f"/chat?job={self.job_id}&role={self.role}"
 
     @rx.var
     def audit_ok(self) -> bool:
@@ -120,6 +174,38 @@ class AppState(rx.State):
     @rx.var
     def has_waiting_level2(self) -> bool:
         return bool(self.status.get("waiting_level2"))
+
+    @rx.var
+    def waiting_names_text(self) -> str:
+        return ", ".join(self.status.get("waiting_names", []))
+
+    @rx.var
+    def has_waiting_names(self) -> bool:
+        return bool(self.status.get("waiting_names"))
+
+    @rx.var
+    def attendance_total_text(self) -> str:
+        return f"{self.status.get('attendance_total', 0)} people in total"
+
+    @rx.var
+    def uncounted_text(self) -> str:
+        return ", ".join(self.status.get("uncounted", []))
+
+    @rx.var
+    def has_uncounted(self) -> bool:
+        return bool(self.status.get("uncounted"))
+
+    @rx.var
+    def agreed_themes(self) -> list[dict[str, Any]]:
+        return [t for t in self.themes if t.get("agreed_upfront")]
+
+    @rx.var
+    def signed_off_themes(self) -> list[dict[str, Any]]:
+        return [t for t in self.themes if t.get("status") in ("confirmed", "fixed", "added")]
+
+    @rx.var
+    def has_name_files(self) -> bool:
+        return bool(self.name_files)
 
     @rx.var
     def job_options(self) -> list[str]:
@@ -179,6 +265,16 @@ class AppState(rx.State):
         return f"WER without word list {c['wer_without_vs_reference']} → with word list {c['wer_with_vs_reference']}"
 
     @rx.var
+    def terms_line(self) -> str:
+        c = self.compare
+        w, wo = c.get("wordlist_terms_with") or {}, c.get("wordlist_terms_without") or {}
+        if not w.get("in_reference"):
+            return ""
+        return (f"Word-list terms in the reference: {w['in_reference']} · got right without the list "
+                f"{wo.get('found', 0)}, with it {w.get('found', 0)} (term error rate {wo.get('error_rate')} → "
+                f"{w.get('error_rate')})")
+
+    @rx.var
     def audit_total_text(self) -> str:
         return f"{self.audit.get('total', 0)} model calls logged"
 
@@ -192,7 +288,16 @@ class AppState(rx.State):
 
     @rx.var
     def stage_names(self) -> list[dict[str, Any]]:
-        return [{**s, "route": STAGE_ROUTES.get(int(s["n"]), "/")} for s in self.stages]
+        out = []
+        for s in self.stages:
+            n = int(s["n"])
+            if n in HIDDEN_STAGES:
+                continue
+            ai, person = STAGE_INFO.get(n, ("", ""))
+            out.append({**s, "route": STAGE_ROUTES.get(n, "/"), "has_route": bool(STAGE_ROUTES.get(n)),
+                        "ai": ai, "person": person, "waiting": s.get("waiting", ""),
+                        "is_waiting": bool(s.get("waiting"))})
+        return out
 
     # ---------- loading ----------
 
@@ -214,6 +319,8 @@ class AppState(rx.State):
         if j is None:
             return
         self.job = j
+        self.attendance = [{**r, "i": i, "line": f"{r['session']}: {r['count']}"}
+                           for i, r in enumerate(j.get("attendance", []))]
         self.files = j.get("files", [])
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
         st = self._api(api.get, f"/jobs/{self.job_id}/status") or {}
@@ -234,6 +341,11 @@ class AppState(rx.State):
         self.themes = [self._shape_theme(t) for t in (self._api(api.get, f"/jobs/{self.job_id}/themes") or [])]
         self.unsupported = [{**u, "line": f"{u['label']} — {u['review_note']}"}
                             for u in (self._api(api.get, f"/jobs/{self.job_id}/themes/unsupported") or [])]
+        nm = self._api(api.get, f"/jobs/{self.job_id}/names") or {}
+        self.names = [{**n, "line": f"{n['real']} → {n['fake']}  ({n['source']})"} for n in nm.get("names", [])]
+        self.name_files = [{**f, "units": [{**u, "line": f"#{u['id']} {u['text']}"} for u in f["units"]],
+                            "units_header": f"What sorting will see ({len(f['units'])})"}
+                           for f in nm.get("files", []) if f["units"]]
         self.units = [{**u, "line": f"#{u['id']} [{u['speaker']}] {u['text']}"}
                       for u in (self._api(api.get, f"/jobs/{self.job_id}/units") or [])]
         self.flags = [{**f, "decision_text": f"Decision: {f['decision']} — {f['reason']}" if f["decision"] else ""}
@@ -252,8 +364,11 @@ class AppState(rx.State):
     @staticmethod
     def _shape_theme(t: dict) -> dict:
         quotes = [{**q, "id_text": f"#{q['unit_id']}"} for q in t.get("quotes", [])]
+        counted = t.get("people_count")
+        people = f"{counted} people (counted)" if counted is not None else f"{t['n_people']} voices heard — not counted"
         return {**t, "quotes": quotes, "quotes_header": f"Quotes ({len(quotes)})",
-                "people_text": f"{t['n_people']} people", "has_note": bool(t.get("review_note"))}
+                "people_text": people, "count_text": "" if counted is None else str(counted),
+                "has_note": bool(t.get("review_note"))}
 
     @staticmethod
     def _shape_segment(s: dict) -> dict:
@@ -292,6 +407,7 @@ class AppState(rx.State):
     def select_job(self, v: str):
         self.job_id = int(v)
         self.selected_file_id = 0
+        self.chat = []
         self.refresh()
 
     def set_wordlist_text(self, v: str):
@@ -320,6 +436,30 @@ class AppState(rx.State):
 
     def set_add_quote_ids(self, v: str):
         self.add_quote_ids = v
+
+    def set_add_from_level3(self, v: bool):
+        self.add_from_level3 = v
+
+    def set_add_level(self, v: str):
+        self.add_level = v
+
+    def set_att_session(self, v: str):
+        self.att_session = v
+
+    def set_att_count(self, v: str):
+        self.att_count = v
+
+    def set_agreed_label(self, v: str):
+        self.agreed_label = v
+
+    def set_agreed_summary(self, v: str):
+        self.agreed_summary = v
+
+    def set_agreed_level(self, v: str):
+        self.agreed_level = v
+
+    def set_new_name(self, v: str):
+        self.new_name = v
 
     def set_flag_reason(self, v: str):
         self.flag_reason = v
@@ -350,7 +490,7 @@ class AppState(rx.State):
 
     def confirm_file(self, file_id: int):
         if self.role != "community":
-            self._say("Only a community reviewer confirms a level (PRD A4). Switch role at the top.", "error")
+            self._say("Only a community reviewer confirms a level (PRD A9). Switch role at the top.", "error")
             return
         if self._api(api.post, f"/files/{int(file_id)}/confirm") is not None:
             self._say("Level confirmed by the community.", "ok")
@@ -417,7 +557,64 @@ class AppState(rx.State):
         self.refresh()
         yield rx.clear_selected_files("facilitator_upload")
 
+    def _put_attendance(self, rows: list[dict]) -> bool:
+        out = self._api(api.put, f"/jobs/{self.job_id}/attendance",
+                        {"sessions": [{"session": r["session"], "count": r["count"]} for r in rows]})
+        if out is not None:
+            self.refresh()
+        return out is not None
+
+    def add_attendance(self):
+        if self.role != "facilitator":
+            self._say("The facilitator enters attendance (PRD §4 stage 0). Switch role at the top.", "error")
+            return
+        rows = [*self.attendance, {"session": self.att_session, "count": self.att_count}]
+        if self._put_attendance(rows):
+            self._say("Attendance saved.", "ok")
+            self.att_session = self.att_count = ""
+
+    def remove_attendance(self, i: int):
+        if self.role != "facilitator":
+            self._say("The facilitator enters attendance. Switch role at the top.", "error")
+            return
+        self._put_attendance([r for r in self.attendance if int(r["i"]) != int(i)])
+
+    def add_agreed_theme(self):
+        out = self._api(api.post, f"/jobs/{self.job_id}/agreed-themes",
+                        {"label": self.agreed_label, "summary": self.agreed_summary,
+                         "level": int(self.agreed_level), "actor_role": self.role})
+        if out is not None:
+            self._say("Theme agreed. Stage 4 will sort material into it.", "ok")
+            self.agreed_label = self.agreed_summary = ""
+            self.refresh()
+
+    # ---------- Level 2 names ----------
+
+    def add_name(self):
+        if self._api(api.post, f"/jobs/{self.job_id}/names", {"real": self.new_name}) is not None:
+            self._say("Name added. Every Level 2 file needs checking again.", "ok")
+            self.new_name = ""
+            self.refresh()
+
+    def remove_name(self, name_id: int):
+        if self._api(api.delete, f"/names/{int(name_id)}") is not None:
+            self._say("Name removed. Every Level 2 file needs checking again.", "ok")
+            self.refresh()
+
+    def mark_names_checked(self, file_id: int):
+        if self._api(api.post, f"/files/{int(file_id)}/names-checked") is not None:
+            self._say("Names checked. Re-run stage 4 to sort once every Level 2 file is checked.", "ok")
+            self.refresh()
+
     # ---------- pipeline ----------
+
+    def reset_job(self):
+        out = self._api(api.post, f"/jobs/{self.job_id}/reset")
+        if out is not None:
+            self._say(f"Job reset to intake: {out['themes_removed']} theme(s) and every stage's output removed. "
+                      "Files, consent and levels kept. Run the stages again from 1.", "ok")
+            self.selected_file_id = 0
+            self.refresh()
 
     def run_stage(self, n: int):
         out = self._api(api.post, f"/jobs/{self.job_id}/run/{int(n)}")
@@ -475,10 +672,24 @@ class AppState(rx.State):
     def add_theme(self):
         ids = [int(x) for x in self.add_quote_ids.replace(",", " ").split() if x.strip().isdigit()]
         out = self._api(api.post, f"/jobs/{self.job_id}/themes",
-                        {"label": self.add_label, "summary": self.add_summary, "quote_unit_ids": ids})
+                        {"label": self.add_label, "summary": self.add_summary, "quote_unit_ids": ids,
+                         "from_level3": self.add_from_level3, "level": int(self.add_level)})
         if out is not None:
             self._say("Theme added by the community.", "ok")
             self.add_label = self.add_summary = self.add_quote_ids = ""
+            self.add_from_level3 = False
+            self.refresh()
+
+    def set_people_count(self, theme_id: int, value: str):
+        value = (value or "").strip()
+        if not value:
+            return
+        if not value.isdigit():
+            self._say("A count is a whole number.", "error")
+            return
+        if self._api(api.patch, f"/themes/{int(theme_id)}/people",
+                     {"count": int(value), "actor_role": self.role}) is not None:
+            self._say("Count saved.", "ok")
             self.refresh()
 
     # ---------- identify ----------
@@ -509,6 +720,57 @@ class AppState(rx.State):
         if self._api(api.post, f"/reports/{int(self.reportback['id'])}/send") is not None:
             self._say("Report-back marked as sent.", "ok")
             self.refresh()
+
+    # ---------- chat with the data ----------
+
+    def set_chat_input(self, v: str):
+        self.chat_input = v
+
+    def clear_chat(self):
+        self.chat = []
+
+    def load_chat(self):
+        """On-load for the chat tab: take the job and role from the link it was opened with."""
+        q = self.router.url.query_parameters
+        if q.get("job", "").isdigit():
+            self.job_id = int(q["job"])
+        if q.get("role") in ROLES:
+            self.role = q["role"]
+        # A backend reload drops a question in flight; don't leave the box locked for good.
+        self.chat_busy = False
+        return AppState.load_all
+
+    def submit_question(self, form_data: dict):
+        self.chat_input = form_data.get("question", "")
+        return AppState.send_question
+
+    @rx.event(background=True)
+    async def send_question(self):
+        async with self:
+            question = self.chat_input.strip()
+            if not question or self.chat_busy:
+                return
+            history = [{"role": m["role"], "text": m["text"]} for m in self.chat]
+            self.chat = [*self.chat, {"role": "user", "text": question, "sources": [], "has_sources": False}]
+            self.chat_input = ""
+            self.chat_busy = True
+            job_id, role = self.job_id, self.role
+        yield rx.scroll_to("chat-end")
+        try:
+            out = await asyncio.to_thread(api.ask, job_id, question, role, history)
+            reply = {"role": "assistant", "text": out.get("answer", ""),
+                     "sources": [{**s, "line": f"[{s['id']}] {s['file']} · {s['where']}"}
+                                 for s in out.get("sources", [])]}
+        except ApiError as e:
+            reply = {"role": "error", "text": e.message, "sources": []}
+        except Exception as e:  # noqa: BLE001
+            reply = {"role": "error", "text": f"API not reachable: {e}", "sources": []}
+        reply["has_sources"] = bool(reply["sources"])
+        reply["sources_header"] = f"Sources ({len(reply['sources'])})"
+        async with self:
+            self.chat = [*self.chat, reply]
+            self.chat_busy = False
+        yield rx.scroll_to("chat-end")
 
     # ---------- concerns ----------
 

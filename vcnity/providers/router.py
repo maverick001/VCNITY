@@ -1,7 +1,8 @@
 """The one door every model call goes through.
 
     Level 3  → Level3NoAI, before any provider is chosen. No exceptions.
-    Level 2  → local only, and only redacted text.
+    Level 2  → local only, and only redacted text — except the stage 4 name
+               scan, which has to read the real names to find them (local only).
     Level 1  → local by default; hosted only if allowed AND configured
                (it is not configured — HostedStub refuses).
 
@@ -31,10 +32,13 @@ def _local(model: str | None = None) -> Provider:
     return OllamaProvider(model or settings.ollama_model)
 
 
-def get_provider(level: int, *, redacted: bool = False, model: str | None = None) -> Provider:
+def get_provider(level: int, *, redacted: bool = False, name_scan: bool = False,
+                 model: str | None = None) -> Provider:
     if level >= 3:
         raise Level3NoAI("Level 3 material never reaches AI (PRD §4 sensitivity table)")
     if level == 2:
+        if name_scan:
+            return _local(model)
         if not redacted:
             raise UnredactedLevel2("Level 2 material must be redacted before any model sees it")
         return _local(model)
@@ -55,10 +59,11 @@ def call(
     images: list[Path] | None = None,
     json_mode: bool = False,
     redacted: bool = False,
+    name_scan: bool = False,
     max_tokens: int = 2000,
     model: str | None = None,
 ) -> str:
-    provider = get_provider(level, redacted=redacted, model=model)
+    provider = get_provider(level, redacted=redacted, name_scan=name_scan, model=model)
     out = provider.complete(prompt, system=system, images=images, json_mode=json_mode, max_tokens=max_tokens)
     record_call(
         session,

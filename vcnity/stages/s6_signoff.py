@@ -55,8 +55,24 @@ def review(session, theme_id: int, *, actor_role: str, action: str,
     return t
 
 
-def add_theme(session, job_id: int, label: str, summary: str, quote_unit_ids: list[int]) -> Theme:
-    """A theme the community says we missed. Still needs at least one real quote."""
+def add_theme(session, job_id: int, label: str, summary: str, quote_unit_ids: list[int], *,
+              from_level3: bool = False, level: int = 1) -> Theme:
+    """A theme the community says we missed. Still needs at least one real quote —
+    unless the community wrote it from Level 3 material, which people transcribed
+    by hand and which never enters the app. Its wording is Level 1 or 2, set by the
+    community; it reaches the client with no quotes (PRD §4 sensitivity table)."""
+    if from_level3:
+        if level not in (1, 2):
+            raise ValueError("the theme's wording is Level 1 or 2; if the wording itself gives someone away, "
+                             "it can't go in a report")
+        t = Theme(job_id=job_id, label=label.strip()[:200] or "Untitled theme", summary=summary.strip(),
+                  status="added", decided_by="community", level=level, from_level3=True, n_people=0)
+        session.add(t)
+        session.flush()
+        session.add(Review(theme_id=t.id, actor_role="community", action="add", before={}, after=_snapshot(t),
+                           note="written from Level 3 material transcribed by hand"))
+        session.flush()
+        return t
     ids = [int(i) for i in quote_unit_ids]
     if not ids:
         raise ValueError("an added theme needs at least one quote behind it")
@@ -71,6 +87,28 @@ def add_theme(session, job_id: int, label: str, summary: str, quote_unit_ids: li
     for u in units:
         session.add(ThemeQuote(theme_id=t.id, unit_id=u.id))
     session.add(Review(theme_id=t.id, actor_role="community", action="add", before={}, after=_snapshot(t)))
+    session.flush()
+    return t
+
+
+def set_people_count(session, theme_id: int, count: int, *, actor_role: str) -> Theme:
+    """The analyst counts the people behind a theme by hand (PRD A6). A count, not
+    a meaning decision, so it doesn't touch the community's lock."""
+    if actor_role != "analyst":
+        raise PermissionError("the analyst counts the people behind a theme (PRD §4 stage 7)")
+    t = session.get(Theme, theme_id)
+    if t is None:
+        raise KeyError(theme_id)
+    count = int(count)
+    if count < 0:
+        raise ValueError("a count can't be negative")
+    total = sum(int(r.get("count", 0)) for r in (session.get(Job, t.job_id).attendance or []))
+    if total and count > total:
+        raise ValueError(f"{count} people is more than the {total} who came")
+    before = {"people_count": t.people_count}
+    t.people_count = count
+    session.add(Review(theme_id=t.id, actor_role="analyst", action="count", before=before,
+                       after={"people_count": count}))
     session.flush()
     return t
 

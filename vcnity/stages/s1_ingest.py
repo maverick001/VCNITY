@@ -1,4 +1,5 @@
-"""Stage 1 — Ingest. Converts formats and records where each file came from.
+"""The conversion half of stage 1, Data Ingest (Intake and Ingest merged).
+Converts formats and records where each file came from.
 
     audio  → 16 kHz mono WAV (PyAV; no system ffmpeg needed)
     image  → EXIF-stripped JPEG copy (GPS and device data never travel further)

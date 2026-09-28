@@ -5,6 +5,22 @@ from vcnity.stages import s2_transcribe, s2b_diarise
 from vcnity.stages._gate import ai_allowed
 
 
+def test_unsure_threshold_is_prd_confidence():
+    import math
+
+    assert math.isclose(math.exp(s2_transcribe.UNSURE_LOGPROB), 0.6)     # PRD A5
+    assert s2_transcribe.flag_unsure({"avg_logprob": math.log(0.59), "no_speech_prob": 0.1}) is True
+    assert s2_transcribe.flag_unsure({"avg_logprob": math.log(0.61), "no_speech_prob": 0.1}) is False
+
+
+def test_wordlist_term_hits():
+    ref = "We met Priya at Kelvin Grove, then Priya left for Ipswich"
+    out = s2_transcribe.term_hits(ref, "we met prier at kelvin grove then Priya left for Ipswich",
+                                  ["Priya", "Kelvin Grove", "Ipswich", "Toowoomba"])
+    assert out == {"in_reference": 4, "found": 3, "error_rate": 0.25}
+    assert s2_transcribe.term_hits("nothing listed here", "x", ["Priya"])["error_rate"] is None
+
+
 def test_flag_unsure():
     assert s2_transcribe.flag_unsure({"avg_logprob": -0.9, "no_speech_prob": 0.1}) is True
     assert s2_transcribe.flag_unsure({"avg_logprob": -0.3, "no_speech_prob": 0.1}) is False
@@ -33,6 +49,8 @@ def test_compare_variants(db_session):
     db_session.flush()
     out = s2_transcribe.compare(db_session, f.id)
     assert 0 < out["wer_between_runs"] < 1
+    ref = s2_transcribe.compare(db_session, f.id, reference="we met at Kelvin Grove today", terms=["Kelvin Grove"])
+    assert ref["wordlist_terms_with"]["error_rate"] == 0.0 and ref["wordlist_terms_without"]["error_rate"] == 1.0
     assert any(d["kind"] == "changed" for d in out["diff"])
     assert out["words_changed"] >= 1
 

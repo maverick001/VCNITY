@@ -84,6 +84,17 @@ def get_engine(uri: str | None = None):
     return _engine
 
 
+# create_all makes missing tables but never adds a column to a table that already
+# exists, so columns added after a database was first made are listed here.
+_ADDED_COLUMNS = [
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS attendance JSON DEFAULT '[]'",
+    "ALTER TABLE source_files ADD COLUMN IF NOT EXISTS names_checked BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE themes ADD COLUMN IF NOT EXISTS people_count INTEGER",
+    "ALTER TABLE themes ADD COLUMN IF NOT EXISTS agreed_upfront BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE themes ADD COLUMN IF NOT EXISTS from_level3 BOOLEAN DEFAULT FALSE",
+]
+
+
 def init_db(uri: str | None = None) -> None:
     from . import models  # noqa: F401  (registers tables)
 
@@ -91,6 +102,9 @@ def init_db(uri: str | None = None) -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     models.Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        for stmt in _ADDED_COLUMNS:
+            conn.execute(text(stmt))
 
 
 @contextmanager

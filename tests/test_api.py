@@ -127,3 +127,46 @@ def test_wordlist_roundtrip(client, tmp_path, monkeypatch):
     assert client.put("/wordlist", json={"text": "Kelvin Grove\nPriya @person\n"}).status_code == 200
     got = client.get("/wordlist").get_json()
     assert got["words"] == ["Kelvin Grove", "Priya"] and got["persons"] == ["Priya"]
+
+
+def test_attendance_agreed_themes_and_counts(client):
+    job = _job(client)
+    r = client.put(f"/jobs/{job}/attendance", json={"sessions": [{"session": "Mon", "count": 9}]})
+    assert r.status_code == 200 and r.get_json()["attendance_total"] == 9
+    assert client.get(f"/jobs/{job}").get_json()["attendance_total"] == 9
+    r = client.post(f"/jobs/{job}/agreed-themes", json={"label": "Parks", "actor_role": "facilitator"})
+    assert r.status_code == 403
+    r = client.post(f"/jobs/{job}/agreed-themes", json={"label": "Parks", "summary": "Shade", "actor_role": "community"})
+    assert r.status_code == 201 and r.get_json()["agreed_upfront"] is True
+    tid = r.get_json()["id"]
+    assert client.patch(f"/themes/{tid}/people", json={"count": 3, "actor_role": "community"}).status_code == 403
+    r = client.patch(f"/themes/{tid}/people", json={"count": 3, "actor_role": "analyst"})
+    assert r.status_code == 200 and r.get_json()["people_count"] == 3
+
+
+def test_level3_theme_via_api(client):
+    job = _job(client)
+    r = client.post(f"/jobs/{job}/themes", json={"label": "Culture", "summary": "s", "from_level3": True, "level": 2})
+    assert r.status_code == 201 and r.get_json()["from_level3"] is True and r.get_json()["quotes"] == []
+
+
+def test_names_endpoints(client):
+    job = _job(client)
+    fid = _upload(client, job, level=2)
+    r = client.post(f"/jobs/{job}/names", json={"real": "Priya"})
+    assert r.status_code == 201
+    names = r.get_json()["names"]
+    assert names[0]["real"] == "Priya" and names[0]["fake"] == "Alex" and names[0]["source"] == "person"
+    assert client.post(f"/jobs/{job}/names", json={"real": "priya"}).status_code == 400
+    assert client.post(f"/files/{fid}/names-checked").get_json()["names_checked"] is True
+    r = client.delete(f"/names/{names[0]['id']}")
+    assert r.status_code == 200 and r.get_json()["names"] == []
+    assert r.get_json()["files"][0]["names_checked"] is False    # changing the list means checking again
+
+
+def test_ask_needs_the_right_role(client):
+    job = _job(client)
+    r = client.post(f"/jobs/{job}/ask", json={"question": "what came up?", "actor_role": "community"})
+    assert r.status_code == 403
+    r = client.post(f"/jobs/{job}/ask", json={"question": "  ", "actor_role": "analyst"})
+    assert r.status_code == 400

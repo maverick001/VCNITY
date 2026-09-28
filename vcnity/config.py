@@ -26,6 +26,8 @@ class Settings:
     hf_token: str | None
     allow_hosted: bool
     small_n: int
+    unsure_confidence: float
+    sort_similarity: float
     safety_contact: str
     api_port: int
     wordlist_path: Path
@@ -45,7 +47,11 @@ def load_settings() -> Settings:
         hf_token=os.environ.get("HF_TOKEN") or None,
         allow_hosted=os.environ.get("VCNITY_ALLOW_HOSTED", "0") == "1",
         small_n=int(os.environ.get("VCNITY_SMALL_N", "3")),
-        safety_contact=os.environ.get("VCNITY_SAFETY_CONTACT") or "UNSET — see PRD A13",
+        # PRD A5: a transcript segment below this confidence goes to a person. Placeholder, tuned in the pilot.
+        unsure_confidence=float(os.environ.get("VCNITY_UNSURE_CONFIDENCE", "0.6")),
+        # Stage 4: how close a quote must be to an agreed theme to be sorted into it (cosine similarity).
+        sort_similarity=float(os.environ.get("VCNITY_SORT_SIMILARITY", "0.45")),
+        safety_contact=os.environ.get("VCNITY_SAFETY_CONTACT") or "UNSET — see PRD A18",
         api_port=int(os.environ.get("VCNITY_API_PORT", "8100")),
         wordlist_path=Path(os.environ.get("VCNITY_WORDLIST", APP_DIR / "data" / "wordlist.txt")),
     )

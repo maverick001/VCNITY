@@ -6,7 +6,9 @@
     uv run --project app python app/scripts/precompute.py --job 1 --reset-signoff              # back to stage 6 for a live run
 
 Stages 1–5 are the slow AI parts. Stages 6–9 need people; --demo-signoff fills
-them in with clearly labelled demo decisions so the report pages have content.
+them in with clearly labelled demo decisions so the report pages have content —
+including the person steps v1.1 of the PRD added: the Level 2 name check before
+stage 4 sorts, attendance, and the analyst's people counts.
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from vcnity import db, pipeline  # noqa: E402
 from vcnity.config import settings  # noqa: E402
-from vcnity.models import IdentifyFlag, Job, Report, Review, SourceFile, Theme  # noqa: E402
+from vcnity.models import IdentifyFlag, Job, Report, Review, SourceFile, Theme, Unit  # noqa: E402
 from vcnity.stages import s0_intake, s6_signoff, s7_identify, s8_report  # noqa: E402
 
 JOB_NAME = "FQI co-design session — September 2026"
@@ -72,6 +74,27 @@ def demo_signoff(session, job_id: int) -> None:
     log("demo sign-off: confirmed every draft theme (labelled)")
 
 
+def demo_names_checked(session, job_id: int) -> None:
+    for f in session.query(SourceFile).filter_by(job_id=job_id, level=2).all():
+        f.names_checked = True
+    log("demo names: marked every Level 2 file's made-up names as checked (labelled) — check them live")
+
+
+def demo_counts(session, job_id: int) -> None:
+    """Attendance and people counts stand in with the number of voices heard — clearly not a real count."""
+    job = session.get(Job, job_id)
+    if not s0_intake.attendance_total(job):
+        voices = session.query(Unit.speaker_key).filter_by(job_id=job_id, excluded=False).distinct().count() or 1
+        s0_intake.set_attendance(session, job_id, [{"session": "DEMO — voices heard, not a headcount",
+                                                    "count": voices}])
+    for t in session.query(Theme).filter(Theme.job_id == job_id,
+                                         Theme.status.in_(("confirmed", "fixed", "added"))).all():
+        if t.people_count is None:
+            s6_signoff.set_people_count(session, t.id, min(t.n_people, s0_intake.attendance_total(job)),
+                                        actor_role="analyst")
+    log("demo counts: attendance and people counts set from voices heard (labelled) — count these live")
+
+
 def demo_decide_flags(session, job_id: int) -> None:
     for f in s7_identify.open_flags(session, job_id):
         s7_identify.decide(session, f.id, "keep", reason="DEMO: kept so the report has content — decide this live")
@@ -80,6 +103,9 @@ def demo_decide_flags(session, job_id: int) -> None:
 
 def reset_signoff(session, job_id: int) -> None:
     for t in session.query(Theme).filter_by(job_id=job_id).all():
+        t.people_count = None
+        if t.agreed_upfront:
+            continue  # agreed at intake, before sign-off: not part of what a live sign-off redoes
         if t.status in ("confirmed", "fixed", "cut", "rejected"):
             t.status = "draft"
             t.decided_by = None
@@ -131,11 +157,23 @@ def main() -> int:
             return 1
         brief = {k: v for k, v in out.items() if k not in ("items", "diff")}
         log(f"stage {n} done in {time.time() - t0:.0f}s: {brief}")
+        if n == 4 and out.get("waiting_name_check"):
+            if not args.demo_signoff:
+                log("stage 4 is waiting for a person to check the Level 2 names — do that on the themes page, "
+                    "then re-run stage 4 and 5")
+                return 0
+            with db.session() as s:
+                demo_names_checked(s, job_id)
+            with db.session() as s:
+                out = pipeline.run_stage(s, job_id, 4)
+            log(f"stage 4 re-run after the name check: {out}")
 
     if args.demo_signoff:
         with db.session() as s:
             demo_signoff(s, job_id)
             pipeline.run_stage(s, job_id, 6)
+        with db.session() as s:
+            demo_counts(s, job_id)
         with db.session() as s:
             flags = pipeline.run_stage(s, job_id, 7)
             log(f"stage 7: {flags}")

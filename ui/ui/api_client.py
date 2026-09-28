@@ -48,6 +48,11 @@ def put(path: str, json=None):
         return _check(c.put(API + path, json=json or {}))
 
 
+def delete(path: str):
+    with httpx.Client(timeout=_TIMEOUT) as c:
+        return _check(c.delete(API + path))
+
+
 def upload_file(path: str, *, filename: str, content: bytes, level: int, consent_label: str, consent_scope: str):
     """Multipart upload — used for adding a new source file to a job."""
     with httpx.Client(timeout=120.0) as c:  # audio files can take a moment
@@ -56,6 +61,13 @@ def upload_file(path: str, *, filename: str, content: bytes, level: int, consent
             files={"file": (filename, content)},
             data={"level": str(level), "consent_label": consent_label, "consent_scope": consent_scope},
         ))
+
+
+def ask(job_id: int, question: str, actor_role: str, history: list[dict]):
+    """A question can take a minute on a laptop CPU, so this waits longer than other calls."""
+    with httpx.Client(timeout=300.0) as c:
+        return _check(c.post(f"{API}/jobs/{job_id}/ask",
+                             json={"question": question, "actor_role": actor_role, "history": history}))
 
 
 def export_url(report_id: int) -> str:

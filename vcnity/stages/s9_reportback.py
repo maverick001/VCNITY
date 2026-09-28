@@ -1,6 +1,6 @@
 """Stage 9 — Report back. A plain-language version for participants: what came
-of what they said, told plainly. Same dual approval as the client report;
-"send" only marks it sent — nothing is transmitted by the prototype.
+of what they said, told plainly. The analyst approves and sends it (PRD §4
+stage 9); "send" only marks it sent — nothing is transmitted by the prototype.
 """
 from __future__ import annotations
 
@@ -46,8 +46,8 @@ def send(session, report_id: int) -> Report:
     rb = session.get(Report, report_id)
     if rb is None or rb.kind != "reportback":
         raise KeyError(report_id)
-    if not (rb.approved_community and rb.approved_analyst):
-        raise PermissionError("both the community and the analyst must approve before it goes back")
+    if not rb.approved_analyst:
+        raise PermissionError("the analyst must approve before it goes back")
     rb.sent = True
     job = session.get(Job, rb.job_id)
     job.status = "done"
