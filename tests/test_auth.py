@@ -1,0 +1,96 @@
+import io
+
+import pytest
+
+
+@pytest.fixture()
+def client(pg_uri):
+    from api.app import create_app
+
+    app = create_app(testing=True, auth_on=True)
+    with app.test_client() as c:
+        yield c
+
+
+def _users(names_roles):
+    """Make accounts straight in the database, the way scripts/users.py does."""
+    from vcnity import auth, db
+    from vcnity.models import Job
+
+    with db.session() as s:
+        jobs = [Job(name="auth job A"), Job(name="auth job B")]
+        s.add_all(jobs)
+        s.flush()
+        ids = [j.id for j in jobs]
+        for name, role, job in names_roles:
+            auth.create_user(s, name, "password123", role, ids[job] if job is not None else None)
+    return ids
+
+
+def _sign_in(client, name):
+    r = client.post("/auth/login", json={"username": name, "password": "password123"})
+    assert r.status_code == 200, r.get_json()
+    return {"Authorization": f"Bearer {r.get_json()['token']}"}
+
+
+def test_nothing_without_signing_in(client):
+    assert client.get("/health").status_code == 200
+    assert client.get("/jobs").status_code == 401
+    assert client.get("/jobs", headers={"Authorization": "Bearer forged"}).status_code == 401
+
+
+def test_wrong_password(client):
+    _users([("fac1", "facilitator", None)])
+    r = client.post("/auth/login", json={"username": "fac1", "password": "nope-nope"})
+    assert r.status_code == 401
+
+
+def test_role_comes_from_the_account_not_the_body(client):
+    ids = _users([("com1", "community", 0), ("cli1", "client", 0)])
+    cli = _sign_in(client, "cli1")
+    assert client.get(f"/jobs/{ids[0]}/segments", headers=cli).status_code == 403
+    assert client.post(f"/jobs/{ids[0]}/run/1", headers=cli).status_code == 403
+    com = _sign_in(client, "com1")
+    assert client.post(f"/jobs/{ids[0]}/reset", headers=com).status_code == 403
+    assert client.get("/auth/me", headers=com).get_json()["role"] == "community"
+
+
+def test_community_and_client_see_only_their_job(client):
+    ids = _users([("com2", "community", 0), ("ana2", "analyst", None)])
+    com = _sign_in(client, "com2")
+    assert [j["id"] for j in client.get("/jobs", headers=com).get_json()] == [ids[0]]
+    assert client.get(f"/jobs/{ids[1]}", headers=com).status_code == 403
+    ana = _sign_in(client, "ana2")
+    seen = {j["id"] for j in client.get("/jobs", headers=ana).get_json()}
+    assert {ids[0], ids[1]} <= seen
+
+
+def test_client_sees_the_report_only_once_both_approve(client):
+    from vcnity import db
+    from vcnity.models import Report
+
+    ids = _users([("cli3", "client", 0)])
+    with db.session() as s:
+        rep = Report(job_id=ids[0], kind="client", markdown="# Report")
+        s.add(rep)
+        s.flush()
+        rid = rep.id
+    cli = _sign_in(client, "cli3")
+    assert client.get(f"/jobs/{ids[0]}/reports", headers=cli).get_json() == []
+    with db.session() as s:
+        r = s.get(Report, rid)
+        r.approved_community = r.approved_analyst = True
+    assert [r["id"] for r in client.get(f"/jobs/{ids[0]}/reports", headers=cli).get_json()] == [rid]
+
+
+def test_links_carry_the_token(client):
+    ids = _users([("fac4", "facilitator", None)])
+    fac = _sign_in(client, "fac4")
+    r = client.post(f"/jobs/{ids[0]}/files", headers=fac, data={
+        "file": (io.BytesIO(b"Some notes from the session."), "n.txt"), "level": "1", "consent_label": "c1"},
+        content_type="multipart/form-data")
+    assert r.status_code == 201
+    fid = r.get_json()["id"]
+    token = fac["Authorization"].removeprefix("Bearer ")
+    assert client.get(f"/files/{fid}/media").status_code == 401
+    assert client.get(f"/files/{fid}/media?t={token}").status_code == 200

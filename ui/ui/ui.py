@@ -1,4 +1,4 @@
-"""VCNITY pipeline UI — one page per PRD §4 stage, a role switch, an audit
+"""VCNITY pipeline UI — a sign-in page, one page per PRD §4 stage, an audit
 panel, and a 'Chat with Data' page, opened in its own tab, for the facilitator and analyst (PRD A19)."""
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from typing import Any
 
 import reflex as rx
 
-from .state import ROLES, STAGE_INFO, AppState
+from .community import community_page
+from .state import STAGE_INFO, AppState
 
 # ---------------------------------------------------------------- layout
 
@@ -104,9 +105,8 @@ def chat_page() -> rx.Component:
         rx.box(
             rx.vstack(
                 rx.cond(~AppState.can_ask,
-                        rx.callout("Only the facilitator or the analyst can ask questions. Switch role on the "
-                                   "main page and open the chat again.", icon="lock", color_scheme="amber",
-                                   width="100%"),
+                        rx.callout("Only the facilitator or the analyst can ask questions.", icon="lock",
+                                   color_scheme="amber", width="100%"),
                         rx.fragment()),
                 rx.cond((AppState.message_kind == "error") & (AppState.message != ""),
                         rx.callout(AppState.message, icon="triangle-alert", color_scheme="red", width="100%"),
@@ -212,10 +212,9 @@ def stage_nav() -> rx.Component:
                       spacing="1", align="start"),
             spacing="3", align="center", padding_bottom="8px"),
         rx.divider(),
-        rx.link(rx.hstack(rx.icon("layout-list", size=16), rx.text("Overview", size="2"), spacing="2",
+        rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Data Pipeline", size="4", line_height="1"), spacing="2",
                           align="center"),
                 href="/pipeline", underline="none", **_nav_style(overview_active)),
-        rx.text("Stages", size="1", color="gray", weight="medium", padding_left="10px", padding_top="6px"),
         rx.foreach(AppState.stage_names, item),
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
@@ -243,16 +242,24 @@ def stage_header(*ns: int) -> rx.Component:
         columns=rx.breakpoints(initial="1", sm="2"), spacing="3", width="100%")
 
 
-def top_bar(title: str) -> rx.Component:
+def user_chip() -> rx.Component:
+    return rx.hstack(
+        rx.icon("circle-user-round", size=18, color="var(--gray-10)"),
+        rx.text(AppState.username, size="2", weight="medium"),
+        rx.badge(AppState.role, color_scheme="gray"),
+        rx.button(rx.icon("log-out", size=14), "Sign out", size="1", variant="ghost", color_scheme="gray",
+                  on_click=AppState.logout),
+        align="center", spacing="2")
+
+
+def top_bar(title: str, show_jobs: bool = True) -> rx.Component:
     return rx.hstack(
         rx.heading(title, size="6", weight="bold"),
         rx.spacer(),
-        rx.hstack(rx.text("I am the", size="2", color="gray"),
-                  rx.select(ROLES, value=AppState.role, on_change=AppState.set_role),
-                  align="center"),
+        user_chip(),
         rx.cond(AppState.jobs.length() > 1,
                 rx.select(AppState.job_options, value=AppState.job_id.to(str), on_change=AppState.select_job),
-                rx.fragment()),
+                rx.fragment()) if show_jobs else rx.fragment(),
         rx.cond(AppState.can_ask, chat_button(), rx.fragment()),
         width="100%", align="center", spacing="4", wrap="wrap",
         padding_bottom="16px", border_bottom="1px solid var(--blue-6)")
@@ -394,7 +401,7 @@ def agreed_card() -> rx.Component:
                                         size="1"),
                               rx.button("Agree theme", size="2", on_click=AppState.add_agreed_theme), align="center"),
                     width="100%"),
-                rx.text("A community reviewer adds these. Switch role at the top.", size="1", color="gray")),
+                rx.text("A community reviewer adds these on their own page.", size="1", color="gray")),
         spacing="2", width="100%")
 
 
@@ -745,7 +752,7 @@ def signoff_actions(t) -> rx.Component:
                   rx.button("Try to confirm (will be refused)", size="1", variant="outline", color_scheme="red",
                             on_click=AppState.review(t["id"], "confirm")), wrap="wrap"))
     return rx.match(AppState.role, ("community", community), ("analyst", analyst),
-                    rx.text("Switch role to community or analyst to act.", size="1", color="gray"))
+                    rx.text("The community answers these on their own page.", size="1", color="gray"))
 
 
 def signoff_page() -> rx.Component:
@@ -898,12 +905,77 @@ def reportback_page() -> rx.Component:
     )
 
 
+# ---------------------------------------------------------------- sign in
+
+def login_page() -> rx.Component:
+    # The photo sits on its own layer so only it is blurred; it spills past the edges so the blur has no rim.
+    backdrop = rx.box(position="fixed", inset="-12px", z_index="0", background_image="url('/login_page.jpg')",
+                      background_size="cover", background_position="center", filter="blur(3px)")
+    tint = rx.box(position="fixed", inset="0", z_index="0", background_color="rgba(15, 23, 42, 0.25)")
+    return rx.box(backdrop, tint, rx.center(
+        rx.vstack(
+            rx.hstack(
+                rx.center(rx.icon("waypoints", size=20, color="white"), background_color="var(--accent-9)",
+                          border_radius="10px", width="40px", height="40px"),
+                rx.vstack(rx.heading("VCNITY", size="5", line_height="1"),
+                          rx.text("AI-assisted co-design analysis", size="1", color="gray"), spacing="1"),
+                align="center", spacing="3"),
+            rx.heading("Sign in", size="6", padding_top="8px"),
+            rx.text("You'll go straight to your own page.", size="2", color="gray"),
+            rx.form(
+                rx.vstack(
+                    rx.text("Username", size="2", weight="medium"),
+                    rx.input(name="username", placeholder="e.g. sam", size="3", width="100%",
+                             auto_focus=True, custom_attrs={"autoComplete": "username"}),
+                    rx.text("Password", size="2", weight="medium", padding_top="4px"),
+                    rx.input(name="password", type="password", size="3", width="100%",
+                             custom_attrs={"autoComplete": "current-password"}),
+                    rx.cond(AppState.login_error != "",
+                            rx.callout(AppState.login_error, icon="triangle-alert", color_scheme="red", size="1",
+                                       width="100%"),
+                            rx.fragment()),
+                    rx.button("Sign in", type="submit", size="3", width="100%", margin_top="8px"),
+                    spacing="2", width="100%"),
+                on_submit=AppState.login, width="100%"),
+            spacing="3", width="100%", max_width="380px", padding="32px",
+            background_color="var(--color-panel-solid)", border_radius="16px",
+            box_shadow="0 12px 32px -16px var(--blue-a8)"),
+        min_height="100vh", padding="16px", position="relative", z_index="1"),
+        min_height="100vh", overflow="hidden", background_color=PAGE_BG)
+
+
+# ---------------------------------------------------------------- client
+
+def client_page() -> rx.Component:
+    """The client researcher: the approved report and nothing else. Never raw data (PRD §3), no quotes (A15)."""
+    return rx.box(
+        rx.vstack(
+            top_bar("Your report", show_jobs=False),  # other jobs are other clients' work
+            message_bar(),
+            rx.cond(
+                AppState.can_export,
+                rx.vstack(
+                    rx.link(rx.button(rx.icon("download", size=16), "Download .docx"), href=AppState.export_url,
+                            is_external=True),
+                    rx.card(rx.markdown(AppState.client_report["markdown"].to(str)), width="100%", padding="24px"),
+                    width="100%", align="start", spacing="4"),
+                rx.callout("Not ready yet. The report shows here once the community and VCNITY have both "
+                           "approved it.", icon="clock", width="100%")),
+            spacing="4", width="100%", max_width="960px", margin="0 auto", padding="32px 16px"),
+        min_height="100vh", background_color=PAGE_BG)
+
+
 # ---------------------------------------------------------------- app
 
 # Slate greys are blue-tinted, so they sit well on the light blue page; solid panels keep cards white on it.
-app = rx.App(theme=rx.theme(accent_color="teal", gray_color="slate", radius="large", panel_background="solid"))
+app = rx.App(theme=rx.theme(accent_color="teal", gray_color="slate", radius="large", panel_background="solid"),
+             # the community page's rounded face
+             head_components=[rx.el.link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Nunito:"
+                                                                "wght@400;500;600;700;800&display=swap")])
 for route, component in [("/", intake_page), ("/pipeline", pipeline_page), ("/transcript", transcript_page),
                          ("/artefacts", artefacts_page), ("/themes", themes_page), ("/signoff", signoff_page),
-                         ("/identify", identify_page), ("/report", report_page), ("/reportback", reportback_page)]:
+                         ("/identify", identify_page), ("/report", report_page), ("/reportback", reportback_page),
+                         ("/community", community_page), ("/client", client_page)]:
     app.add_page(component, route=route, on_load=AppState.load_all, title="VCNITY pipeline")
 app.add_page(chat_page, route="/chat", on_load=AppState.load_chat, title="Chat with Data · VCNITY")
+app.add_page(login_page, route="/login", on_load=AppState.load_login, title="Sign in · VCNITY")

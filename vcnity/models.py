@@ -236,3 +236,20 @@ class AICall(Base):
     model: Mapped[str] = mapped_column(String(100))
     purpose: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class User(Base):
+    """Someone who signs in. A community or client account is tied to one job and sees nothing else;
+    a facilitator or analyst account has no job and sees them all."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("role in ('facilitator','community','analyst','client')", name="ck_user_role"),
+        CheckConstraint("role in ('facilitator','analyst') or job_id is not null", name="ck_user_job"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(80), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(20))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

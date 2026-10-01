@@ -44,6 +44,15 @@ def test_level_only_goes_up(client):
     assert r.status_code == 200 and r.get_json()["level"] == 3
 
 
+def test_preview_shows_the_file_before_confirming(client):
+    job = _job(client)
+    fid = _upload(client, job, level=2)
+    r = client.get(f"/files/{fid}/preview")
+    assert r.status_code == 200 and r.get_json()["text"].startswith("Facilitator notes")
+    r = client.get(f"/files/{fid}/media")
+    assert r.status_code == 200 and r.data.startswith(b"Facilitator notes")
+
+
 def test_gate_then_confirm(client):
     job = _job(client)
     fid = _upload(client, job, level=2)

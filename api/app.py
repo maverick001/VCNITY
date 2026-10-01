@@ -1,7 +1,12 @@
 """Flask API over the pipeline. Owns the database; runs stages in a background
 thread. The Reflex UI talks only to this.
 
+Every request but /health and /auth/login needs a signed-in account (see
+PERMISSIONS below and vcnity/auth.py). Tests run with auth off unless they ask.
+
 Rules become status codes:
+    not signed in               → 401
+    wrong role or other job     → 403
     lowering a level            → 400
     analyst overrides community → 409
     AI stage before confirmation→ 409
@@ -9,15 +14,16 @@ Rules become status codes:
 """
 from __future__ import annotations
 
+import mimetypes
 import threading
 import time
 import traceback
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, g, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
-from vcnity import ask, audit, db, pipeline
+from vcnity import ask, audit, auth, db, pipeline
 from vcnity.config import settings
 from vcnity.models import (Artefact, Concern, IdentifyFlag, Job, Pseudonym, Report, Segment, SourceFile, Theme,
                            Unit)
@@ -26,6 +32,25 @@ from vcnity.stages import (concerns, s0_intake, s2_transcribe, s4_themes, s6_sig
 from vcnity.wordlist import load_wordlist, person_names, save_wordlist
 
 RUNS: dict[int, dict] = {}  # job_id → {stage, started, finished, error, result}
+
+# Who may call what, by endpoint (the view function's name). Anything not listed is refused.
+# The community and the client are also held to their own job (see _job_of). PRD §3, A19–A21.
+F, C, A, CL = "facilitator", "community", "analyst", "client"
+STAFF, EVERYONE = (F, A), (F, C, A, CL)
+PERMISSIONS: dict[str, tuple[str, ...]] = {
+    "me": EVERYONE, "list_jobs": EVERYONE, "get_job": EVERYONE, "reports": EVERYONE,
+    "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
+    "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, C),
+    "preview": (F, C, A), "media": (F, C, A), "get_wordlist": (F, C, A), "put_wordlist": (F, C, A),
+    "run_stage": STAFF, "reset_job": STAFF, "status": STAFF, "segments": STAFF, "compare": STAFF,
+    "compare_with_reference": STAFF, "unsupported": STAFF, "names": STAFF, "flags": STAFF,
+    "ask_question": STAFF, "list_concerns": STAFF, "raise_concern": STAFF, "sort_concern": STAFF,
+    "artefacts": (F, C, A), "artefact_image": (F, C, A), "maker_statement": (F, C, A),
+    "themes": (F, C, A), "units": (F, C, A), "job_audit": (F, C, A),
+    "review": (C, A), "approve": (C, A), "export": (A, CL),
+    "people_count": (A,), "add_name": (A,), "remove_name": (A,), "names_checked": (A,), "decide": (A,),
+    "edit_report": (A,), "send": (A,),
+}
 _lock = threading.Lock()
 
 
@@ -71,8 +96,33 @@ def _err(msg: str, code: int):
 
 # ---------- app ----------
 
-def create_app(testing: bool = False) -> Flask:
+def _job_of(s, args: dict) -> int | None:
+    """The job a request is about, from whatever id is in its URL."""
+    if "job_id" in args:
+        return args["job_id"]
+    row = None
+    if "file_id" in args:
+        row = s.get(SourceFile, args["file_id"])
+    elif "theme_id" in args:
+        row = s.get(Theme, args["theme_id"])
+    elif "report_id" in args:
+        row = s.get(Report, args["report_id"])
+    elif "art_id" in args:
+        a = s.get(Artefact, args["art_id"])
+        row = s.get(SourceFile, a.file_id) if a else None
+    elif "flag_id" in args:
+        f = s.get(IdentifyFlag, args["flag_id"])
+        row = s.get(Theme, f.theme_id) if f else None
+    elif "concern_id" in args:
+        row = s.get(Concern, args["concern_id"])
+    elif "name_id" in args:
+        row = s.get(Pseudonym, args["name_id"])
+    return row.job_id if row is not None else None
+
+
+def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
     app = Flask(__name__)
+    auth_on = not testing if auth_on is None else auth_on
     app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
     upload_dir = settings.home / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -98,6 +148,45 @@ def create_app(testing: bool = False) -> Flask:
     def _key(e):
         return _err(f"not found: {e}", 404)
 
+    @app.before_request
+    def _sign_in_check():
+        g.user = None
+        if not auth_on or request.endpoint in ("health", "login") or request.method == "OPTIONS":
+            return None
+        # A header from the UI's server; ?t= on links the browser opens itself (photos, audio, downloads).
+        header = request.headers.get("Authorization", "")
+        token = header.removeprefix("Bearer ").strip() or request.args.get("t", "")
+        with db.session() as s:
+            user = auth.user_from_token(s, token)
+            if user is None:
+                return _err("please sign in", 401)
+            g.user = auth.as_dict(user)
+            if g.user["role"] not in PERMISSIONS.get(request.endpoint or "", ()):
+                return _err(f"a {g.user['role']} can't do that", 403)
+            mine = g.user["job_id"]
+            if mine is not None and request.view_args:
+                other = _job_of(s, request.view_args)
+                if other is not None and other != mine:
+                    return _err("that belongs to another job", 403)
+        return None
+
+    def _role(data: dict) -> str:
+        """The caller's role: the signed-in account's, or (auth off, in tests) what the body says."""
+        return g.user["role"] if g.user else data.get("actor_role", "")
+
+    @app.post("/auth/login")
+    def login():
+        data = request.get_json(force=True) or {}
+        with db.session() as s:
+            user = auth.check_login(s, data.get("username", ""), data.get("password", ""))
+            if user is None:
+                return _err("that username and password don't match", 401)
+            return jsonify({**auth.as_dict(user), "token": auth.make_token(user)})
+
+    @app.get("/auth/me")
+    def me():
+        return jsonify(g.user or {})
+
     @app.get("/health")
     def health():
         return jsonify({"ok": True, "model": settings.ollama_model, "vision_model": settings.ollama_vision_model,
@@ -115,7 +204,10 @@ def create_app(testing: bool = False) -> Flask:
     @app.get("/jobs")
     def list_jobs():
         with db.session() as s:
-            return jsonify([{"id": j.id, "name": j.name, "status": j.status} for j in s.query(Job).order_by(Job.id)])
+            q = s.query(Job).order_by(Job.id)
+            if g.user and g.user["job_id"] is not None:
+                q = q.filter(Job.id == g.user["job_id"])
+            return jsonify([{"id": j.id, "name": j.name, "status": j.status} for j in q])
 
     @app.get("/jobs/<int:job_id>")
     def get_job(job_id):
@@ -140,7 +232,7 @@ def create_app(testing: bool = False) -> Flask:
         data = request.get_json(force=True) or {}
         with db.session() as s:
             t = s0_intake.add_agreed_theme(s, job_id, data.get("label", ""), data.get("summary", ""),
-                                           level=int(data.get("level", 1)), actor_role=data.get("actor_role", ""))
+                                           level=int(data.get("level", 1)), actor_role=_role(data))
             return jsonify(_theme(t)), 201
 
     @app.post("/jobs/<int:job_id>/files")
@@ -178,6 +270,35 @@ def create_app(testing: bool = False) -> Flask:
     def confirm(file_id):
         with db.session() as s:
             return jsonify(_file(s0_intake.confirm_level(s, file_id)))
+
+    def _preview_path(f: SourceFile) -> Path:
+        return Path((f.provenance or {}).get("ingested_path") or f.path)
+
+    @app.get("/files/<int:file_id>/preview")
+    def preview(file_id):
+        """What a community reviewer looks at before confirming a level. No AI: the
+        file itself, or the words stage 1 pulled out of it."""
+        with db.session() as s:
+            f = s.get(SourceFile, file_id)
+            if f is None:
+                return _err("not found", 404)
+            text = ""
+            if f.kind == "text":
+                p = _preview_path(f)
+                if p.suffix.lower() in (".txt", ".md") and p.exists():
+                    text = p.read_text(encoding="utf-8", errors="replace")[:600]
+            return jsonify({"id": f.id, "kind": f.kind, "text": text})
+
+    @app.get("/files/<int:file_id>/media")
+    def media(file_id):
+        with db.session() as s:
+            f = s.get(SourceFile, file_id)
+            if f is None:
+                return _err("not found", 404)
+            p = _preview_path(f)
+        if not p.exists():
+            return _err("file is missing on disk", 404)
+        return send_file(p, mimetype=mimetypes.guess_type(p.name)[0] or "application/octet-stream")
 
     # ---- running stages ----
 
@@ -301,7 +422,7 @@ def create_app(testing: bool = False) -> Flask:
     def review(theme_id):
         data = request.get_json(force=True)
         with db.session() as s:
-            t = s6_signoff.review(s, theme_id, actor_role=data["actor_role"], action=data["action"],
+            t = s6_signoff.review(s, theme_id, actor_role=_role(data), action=data["action"],
                                   label=data.get("label"), summary=data.get("summary"), note=data.get("note", ""))
             return jsonify(_theme(t))
 
@@ -317,7 +438,7 @@ def create_app(testing: bool = False) -> Flask:
     def people_count(theme_id):
         data = request.get_json(force=True)
         with db.session() as s:
-            t = s6_signoff.set_people_count(s, theme_id, data["count"], actor_role=data.get("actor_role", ""))
+            t = s6_signoff.set_people_count(s, theme_id, data["count"], actor_role=_role(data))
             return jsonify(_theme(t))
 
     # ---- Level 2 names (stage 4) ----
@@ -389,7 +510,10 @@ def create_app(testing: bool = False) -> Flask:
     @app.get("/jobs/<int:job_id>/reports")
     def reports(job_id):
         with db.session() as s:
-            return jsonify([_report(r) for r in s.query(Report).filter_by(job_id=job_id).all()])
+            rows = s.query(Report).filter_by(job_id=job_id).all()
+            if g.user and g.user["role"] == "client":  # the client sees the finished report, nothing before it
+                rows = [r for r in rows if r.kind == "client" and r.approved_community and r.approved_analyst]
+            return jsonify([_report(r) for r in rows])
 
     @app.patch("/reports/<int:report_id>")
     def edit_report(report_id):
@@ -401,7 +525,7 @@ def create_app(testing: bool = False) -> Flask:
     def approve(report_id):
         data = request.get_json(force=True)
         with db.session() as s:
-            return jsonify(_report(s8_report.approve(s, report_id, data["actor_role"])))
+            return jsonify(_report(s8_report.approve(s, report_id, _role(data))))
 
     @app.get("/reports/<int:report_id>/export")
     def export(report_id):
@@ -426,7 +550,7 @@ def create_app(testing: bool = False) -> Flask:
                 # the laptop can't hold the stage's model and the text model at once
                 return _err(f"stage {r['stage']} is running — ask again when it finishes", 409)
         with db.session() as s:
-            return jsonify(ask.ask(s, job_id, data.get("question", ""), actor_role=data.get("actor_role", ""),
+            return jsonify(ask.ask(s, job_id, data.get("question", ""), actor_role=_role(data),
                                    history=data.get("history") or []))
 
     # ---- concerns ----

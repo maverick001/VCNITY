@@ -10,11 +10,20 @@ import reflex as rx
 from . import api_client as api
 from .api_client import ApiError
 
-ROLES = ["facilitator", "community", "analyst", "client"]
+# The community and the client each get one page of their own and none of the stage pages.
+ROLE_HOME = {"community": "/community", "client": "/client"}
+# Plain words for the community page: name, what's in it, what happens to it. PRD §4 levels table.
+LEVEL_WORDS = {
+    1: ("Open", "General comments about places, services and surroundings. The computer can help sort it."),
+    2: ("Sensitive", "Personal stories, health and wellbeing, or anything tied to a known group. Real names are "
+                     "swapped for made-up ones before the computer sorts it."),
+    3: ("Restricted", "Cultural knowledge, or someone telling us about harm. People only — the computer never "
+                      "touches it, and it never reaches the client."),
+}
 # Stage 1 is Data Ingest: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
 STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
-# Left out of the sidebar and Overview. Report back isn't on the client's slides; it stays reachable at
+# Left out of the sidebar and the Data Pipeline page. Report back isn't on the client's slides; it stays reachable at
 # /reportback until the client says what slide 11's "reporting function" means (PRD A14).
 HIDDEN_STAGES = {9}
 
@@ -42,8 +51,12 @@ STAGE_INFO = {
 
 
 class AppState(rx.State):
-    # who / where
-    role: str = "facilitator"
+    # who / where — the token is a cookie so a new tab or a reload stays signed in; the rest comes from it
+    token: str = rx.Cookie("", name="vcnity_token", max_age=12 * 3600, same_site="strict")
+    role: str = ""
+    username: str = ""
+    user_job_id: int = 0  # the one job a community or client account belongs to; 0 for staff
+    login_error: str = ""
     job_id: int = 0
     jobs: list[dict[str, Any]] = []
     job: dict[str, Any] = {}
@@ -104,6 +117,13 @@ class AppState(rx.State):
     add_quote_ids: str = ""
     add_from_level3: bool = False
     add_level: str = "1"
+    add_pick: list[int] = []
+    unit_search: str = ""
+
+    # community page
+    file_previews: dict[str, str] = {}
+    new_word: str = ""
+    new_word_is_name: bool = False
 
     # identify
     flags: list[dict[str, Any]] = []
@@ -133,8 +153,12 @@ class AppState(rx.State):
 
     def _api(self, fn, *a, **kw):
         try:
-            return fn(*a, **kw)
+            return fn(*a, token=self.token, **kw)
         except ApiError as e:
+            if e.status == 401:
+                self._forget_user()
+                self._say("Please sign in again.", "error")
+                return None
             self._say(f"{e.status}: {e.message}", "error")
         except Exception as e:  # noqa: BLE001
             self._say(f"API not reachable: {e}", "error")
@@ -142,7 +166,7 @@ class AppState(rx.State):
 
     @rx.var
     def export_url(self) -> str:
-        return api.export_url(int(self.client_report.get("id", 0))) if self.client_report else ""
+        return api.export_url(int(self.client_report.get("id", 0)), self.token) if self.client_report else ""
 
     @rx.var
     def can_export(self) -> bool:
@@ -160,8 +184,8 @@ class AppState(rx.State):
 
     @rx.var
     def chat_url(self) -> str:
-        # A new tab starts with fresh state, so the job and role travel in the link.
-        return f"/chat?job={self.job_id}&role={self.role}"
+        # A new tab starts with fresh state, so the job travels in the link; who you are comes from the cookie.
+        return f"/chat?job={self.job_id}"
 
     @rx.var
     def audit_ok(self) -> bool:
@@ -299,31 +323,237 @@ class AppState(rx.State):
                         "is_waiting": bool(s.get("waiting"))})
         return out
 
+    # ---------- community page ----------
+
+    @staticmethod
+    def _nice_name(filename: str) -> str:
+        head, sep, rest = filename.partition("_")  # uploads carry their database id: "12_session1.m4a"
+        return rest if sep and head.isdigit() else filename
+
+    @rx.var
+    def c_files(self) -> list[dict[str, Any]]:
+        out = []
+        for f in self.files:
+            if f["kind"] == "brief":
+                continue
+            level = int(f["level"])
+            name, meaning = LEVEL_WORDS.get(level, ("?", ""))
+            preview = self.file_previews.get(str(f["id"]), "")
+            out.append({"id": f["id"], "name": self._nice_name(f["filename"]), "kind": f["kind"],
+                        "level": level, "level_name": name,
+                        "level_meaning": meaning,
+                        "preview": preview, "has_preview": bool(preview), "media_url": api.media_url(int(f["id"]), self.token),
+                        "waiting": level == 2 and not f["confirmed"],
+                        "raise_to": level + 1, "can_raise": level < 3})
+        return out
+
+    @rx.var
+    def c_files_waiting(self) -> list[dict[str, Any]]:
+        return [f for f in self.c_files if f["waiting"]]
+
+    @rx.var
+    def c_waiting_count(self) -> int:
+        return len(self.c_files_waiting)
+
+    @rx.var
+    def wordlist_items(self) -> list[dict[str, Any]]:
+        out = []
+        for i, raw in enumerate(self.wordlist_text.splitlines()):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            term = line.replace("@person", "").strip()
+            if term:
+                out.append({"i": i, "term": term, "is_name": "@person" in line})
+        return out
+
+    @rx.var
+    def c_themes(self) -> list[dict[str, Any]]:
+        status_words = {
+            "draft": ("Needs your answer", "orange"), "confirmed": ("You said: that's right", "grass"),
+            "fixed": ("You fixed the wording", "grass"), "rejected": ("You said: that's not right", "tomato"),
+            "added": ("You added this", "grass"), "cut": ("Taken out to protect someone's privacy", "gray"),
+        }
+        out = []
+        for t in self.themes:
+            status = t["status"]
+            words, colour = status_words.get(status, (status, "gray"))
+            if t["from_level3"]:
+                origin = "Written by the community from Restricted material, so it has no quotes"
+            elif t["agreed_upfront"]:
+                origin = "One of the themes you agreed at the start"
+            elif status == "added":
+                origin = "Something the computer missed"
+            else:
+                origin = "A new idea the computer suggested — keep it?"
+            counted = t.get("people_count")
+            people = f"{counted} people" if counted is not None else f"{t['n_people']} voices"
+            quotes = t["quotes"]
+            out.append({**t, "status_words": words, "status_colour": colour, "origin": origin,
+                        "people": people, "is_open": status == "draft", "quotes_top": quotes[:2],
+                        "quotes_rest": quotes[2:], "has_rest": len(quotes) > 2,
+                        "rest_header": f"Read {len(quotes) - 2} more", "has_quotes": bool(quotes)})
+        # what still needs an answer first
+        return sorted(out, key=lambda t: (not t["is_open"], t["id"]))
+
+    @rx.var
+    def c_open_count(self) -> int:
+        return sum(1 for t in self.themes if t["status"] == "draft")
+
+    @rx.var
+    def c_theme_total(self) -> int:
+        return len(self.themes)
+
+    @rx.var
+    def c_progress(self) -> int:
+        n = len(self.themes)
+        return round(100 * (n - self.c_open_count) / n) if n else 0
+
+    @rx.var
+    def c_progress_text(self) -> str:
+        n = len(self.themes)
+        return f"{n - self.c_open_count} of {n} answered"
+
+    @rx.var
+    def c_units(self) -> list[dict[str, Any]]:
+        q = self.unit_search.strip().lower()
+        if not q:  # no full transcript on the community page, only what a search turns up
+            return []
+        hits = [u for u in self.units if q in u["text"].lower()]
+        return [{"id": u["id"], "text": u["text"], "picked": int(u["id"]) in self.add_pick} for u in hits[:40]]
+
+    @rx.var
+    def c_pick_text(self) -> str:
+        n = len(self.add_pick)
+        return "No quotes picked yet" if n == 0 else f"{n} quote{'s' if n != 1 else ''} picked"
+
+    @rx.var
+    def c_artefacts(self) -> list[dict[str, Any]]:
+        return [{**a, "name": self._nice_name(a["filename"]), "has_statement": bool(a["maker_statement"])}
+                for a in self.artefacts]
+
+    @rx.var
+    def c_artefacts_left(self) -> int:
+        return sum(1 for a in self.artefacts if not a["maker_statement"])
+
+    @rx.var
+    def c_report_waiting(self) -> bool:
+        return self.has_client_report and not self.client_report.get("approved_community")
+
+    @rx.var
+    def c_summary(self) -> str:
+        jobs = []
+        if self.c_waiting_count:
+            jobs.append(f"{self.c_waiting_count} file{'s' if self.c_waiting_count != 1 else ''} to check")
+        if self.c_open_count:
+            jobs.append(f"{self.c_open_count} theme{'s' if self.c_open_count != 1 else ''} to answer")
+        if self.c_report_waiting:
+            jobs.append("a report to approve")
+        if not jobs:
+            return "Nothing needs you right now. Thank you!"
+        return "Waiting for you: " + ", ".join(jobs[:-1]) + (" and " if len(jobs) > 1 else "") + jobs[-1] + "."
+
     # ---------- loading ----------
+
+    # ---------- signing in ----------
+
+    def _forget_user(self):
+        self.token = ""
+        self.role = self.username = ""
+        self.user_job_id = self.job_id = 0
+        self.jobs = []
+
+    def _who_am_i(self) -> bool:
+        """Fill in the account from the token cookie (a new tab, a reload). False if not signed in."""
+        if not self.token:
+            self._forget_user()
+            return False
+        if self.role:
+            return True
+        me = self._api(api.get, "/auth/me")
+        if not me:
+            return False
+        self.role, self.username = me["role"], me["username"]
+        self.user_job_id = int(me.get("job_id") or 0)
+        if self.user_job_id:
+            self.job_id = self.user_job_id
+        return True
+
+    def _route_for_role(self):
+        """Signed out → sign-in page. The community and the client have a page each; staff use the stage pages."""
+        path = self.router.url.path
+        if not self._who_am_i():
+            return None if path == "/login" else rx.redirect("/login")
+        home = ROLE_HOME.get(self.role, "/")
+        if path == "/login":
+            return rx.redirect(home)
+        if self.role in ROLE_HOME and path != home:
+            return rx.redirect(home)
+        if self.role not in ROLE_HOME and path in ROLE_HOME.values():
+            return rx.redirect("/")
+        return None
+
+    def load_login(self):
+        self.login_error = ""
+        return self._route_for_role()
+
+    def login(self, form_data: dict):
+        try:
+            me = api.post("/auth/login", {"username": form_data.get("username", ""),
+                                          "password": form_data.get("password", "")})
+        except ApiError as e:
+            self.login_error = e.message
+            return None
+        except Exception as e:  # noqa: BLE001
+            self.login_error = f"The app's server isn't answering: {e}"
+            return None
+        self._forget_user()
+        self.token = me["token"]
+        self.role, self.username = me["role"], me["username"]
+        self.user_job_id = int(me.get("job_id") or 0)
+        self.job_id = self.user_job_id
+        self.login_error = self.message = ""
+        self.chat = []
+        return rx.redirect(ROLE_HOME.get(self.role, "/"))
+
+    def logout(self):
+        self._forget_user()
+        self.message = ""
+        self.chat = []
+        return rx.redirect("/login")
 
     def load_all(self):
         self.message = ""
+        go = self._route_for_role()
+        if not self.role:
+            return go
         jobs = self._api(api.get, "/jobs")
         if jobs is None:
-            return
+            return go
         self.jobs = jobs
         if not self.job_id and jobs:
             self.job_id = int(jobs[-1]["id"])
         if not self.job_id:
             self._say("No job yet. Run app/scripts/precompute.py or create one below.")
-            return
+            return go
         self.refresh()
+        return go
 
     def refresh(self):
         j = self._api(api.get, f"/jobs/{self.job_id}")
         if j is None:
             return
         self.job = j
+        staff = self.role in ("facilitator", "analyst")
         self.attendance = [{**r, "i": i, "line": f"{r['session']}: {r['count']}"}
                            for i, r in enumerate(j.get("attendance", []))]
         self.files = j.get("files", [])
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
-        st = self._api(api.get, f"/jobs/{self.job_id}/status") or {}
+        # Each role fetches only what the API lets it see (PERMISSIONS in api/app.py).
+        if self.role == "client":
+            self._load_reports()
+            return
+        st = (self._api(api.get, f"/jobs/{self.job_id}/status") or {}) if staff else {}
         self.status = st
         self.stages = st.get("stages", [])
         self.run = st.get("run") or {}
@@ -334,14 +564,15 @@ class AppState(rx.State):
         self.files = [{**f, "level_text": str(f["level"]), "consent_text": f"consent #{f['consent_id']}",
                        "id_text": str(f["id"])} for f in self.files]
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
-        self.artefacts = [{**a, "image_url": api.image_url(int(a["id"])),
+        self.artefacts = [{**a, "image_url": api.image_url(int(a["id"]), self.token),
                            "illegible_text": f"{a['illegible_count']} illegible",
                            "maker_text": a["maker_statement"] or "—"}
                           for a in (self._api(api.get, f"/jobs/{self.job_id}/artefacts") or [])]
         self.themes = [self._shape_theme(t) for t in (self._api(api.get, f"/jobs/{self.job_id}/themes") or [])]
         self.unsupported = [{**u, "line": f"{u['label']} — {u['review_note']}"}
-                            for u in (self._api(api.get, f"/jobs/{self.job_id}/themes/unsupported") or [])]
-        nm = self._api(api.get, f"/jobs/{self.job_id}/names") or {}
+                            for u in ((self._api(api.get, f"/jobs/{self.job_id}/themes/unsupported") or [])
+                                      if staff else [])]
+        nm = (self._api(api.get, f"/jobs/{self.job_id}/names") or {}) if staff else {}
         self.names = [{**n, "line": f"{n['real']} → {n['fake']}  ({n['source']})"} for n in nm.get("names", [])]
         self.name_files = [{**f, "units": [{**u, "line": f"#{u['id']} {u['text']}"} for u in f["units"]],
                             "units_header": f"What sorting will see ({len(f['units'])})"}
@@ -349,17 +580,27 @@ class AppState(rx.State):
         self.units = [{**u, "line": f"#{u['id']} [{u['speaker']}] {u['text']}"}
                       for u in (self._api(api.get, f"/jobs/{self.job_id}/units") or [])]
         self.flags = [{**f, "decision_text": f"Decision: {f['decision']} — {f['reason']}" if f["decision"] else ""}
-                      for f in (self._api(api.get, f"/jobs/{self.job_id}/flags") or [])]
+                      for f in ((self._api(api.get, f"/jobs/{self.job_id}/flags") or []) if staff else [])]
+        self._load_reports()
+        self.concerns = [{**c, "stage_text": f"stage {c['stage']}",
+                          "routed_text": f"Routed to: {c['routed_to']} · treated as Level {c['level']}" if c["routed_to"] else ""}
+                         for c in ((self._api(api.get, f"/jobs/{self.job_id}/concerns") or []) if staff else [])]
+        if self.role == "community":
+            previews = {}
+            for f in self.files:
+                if f["kind"] == "text":
+                    p = self._api(api.get, f"/files/{int(f['id'])}/preview") or {}
+                    previews[str(f["id"])] = p.get("text", "")
+            self.file_previews = previews
+        if staff and self.audio_files and not self.selected_file_id:
+            self.selected_file_id = int(self.audio_files[0]["id"])
+        if staff and self.selected_file_id:
+            self._load_transcript()
+
+    def _load_reports(self):
         reps = self._api(api.get, f"/jobs/{self.job_id}/reports") or []
         self.client_report = next((r for r in reps if r["kind"] == "client"), {})
         self.reportback = next((r for r in reps if r["kind"] == "reportback"), {})
-        self.concerns = [{**c, "stage_text": f"stage {c['stage']}",
-                          "routed_text": f"Routed to: {c['routed_to']} · treated as Level {c['level']}" if c["routed_to"] else ""}
-                         for c in (self._api(api.get, f"/jobs/{self.job_id}/concerns") or [])]
-        if self.audio_files and not self.selected_file_id:
-            self.selected_file_id = int(self.audio_files[0]["id"])
-        if self.selected_file_id:
-            self._load_transcript()
 
     @staticmethod
     def _shape_theme(t: dict) -> dict:
@@ -401,8 +642,25 @@ class AppState(rx.State):
 
     # ---------- simple setters ----------
 
-    def set_role(self, v: str):
-        self.role = v
+    def set_unit_search(self, v: str):
+        self.unit_search = v
+
+    def toggle_pick(self, unit_id: int):
+        uid = int(unit_id)
+        self.add_pick = [u for u in self.add_pick if u != uid] if uid in self.add_pick else [*self.add_pick, uid]
+
+    # "Could this wording identify someone?" is the plain-words form of a theme's level (1 or 2).
+    def set_add_identifying(self, v: bool):
+        self.add_level = "2" if v else "1"
+
+    def set_agreed_identifying(self, v: bool):
+        self.agreed_level = "2" if v else "1"
+
+    def set_new_word(self, v: str):
+        self.new_word = v
+
+    def set_new_word_is_name(self, v: bool):
+        self.new_word_is_name = v
 
     def select_job(self, v: str):
         self.job_id = int(v)
@@ -484,21 +742,44 @@ class AppState(rx.State):
     def set_file_level(self, file_id: int, level: str):
         out = self._api(api.patch, f"/files/{int(file_id)}/level", {"level": int(level), "actor_role": self.role})
         if out is not None:
-            self._say(f"Level set to {level}. " + ("Material withdrawn from AI outputs." if int(level) == 3 else
-                                                  "A community reviewer must confirm before AI runs."), "ok")
+            if self.role == "community":
+                self._say(f"Moved up to {LEVEL_WORDS[int(level)][0]}. " +
+                          ("Only people will handle it from now on." if int(level) == 3 else
+                           "Please check the label once more below."), "ok")
+            else:
+                self._say(f"Level set to {level}. " + ("Material withdrawn from AI outputs." if int(level) == 3 else
+                                                      "A community reviewer must confirm before AI runs."), "ok")
             self.refresh()
 
     def confirm_file(self, file_id: int):
         if self.role != "community":
-            self._say("Only a community reviewer confirms a level (PRD A9). Switch role at the top.", "error")
+            self._say("Only a community reviewer confirms a level (PRD A9).", "error")
             return
         if self._api(api.post, f"/files/{int(file_id)}/confirm") is not None:
-            self._say("Level confirmed by the community.", "ok")
+            self._say("Thank you — that label is confirmed.", "ok")
             self.refresh()
 
     def save_wordlist(self):
         if self._api(api.put, "/wordlist", {"text": self.wordlist_text}) is not None:
             self._say("Word list saved. Re-run stage 2 to use it.", "ok")
+
+    def add_word(self):
+        word = self.new_word.strip()
+        if not word:
+            return
+        line = f"{word} @person" if self.new_word_is_name else word
+        text = self.wordlist_text.rstrip("\n")
+        text = f"{text}\n{line}\n" if text else f"{line}\n"
+        if self._api(api.put, "/wordlist", {"text": text}) is not None:
+            self.wordlist_text = text
+            self.new_word, self.new_word_is_name = "", False
+            self._say(f"Added “{word}”. We'll listen out for it next time the recordings are read.", "ok")
+
+    def remove_word(self, i: int):
+        lines = self.wordlist_text.splitlines()
+        text = "\n".join(line for n, line in enumerate(lines) if n != int(i)) + "\n"
+        if self._api(api.put, "/wordlist", {"text": text}) is not None:
+            self.wordlist_text = text
 
     def set_upload_level(self, v: str):
         self.upload_level = v
@@ -518,7 +799,7 @@ class AppState(rx.State):
         # early-return branch must yield too — otherwise Reflex never flushes
         # that state change to the browser and the page looks like nothing happened.
         if self.role != "facilitator":
-            self._say("Only a facilitator uploads files (PRD §3). Switch role at the top.", "error")
+            self._say("Only a facilitator uploads files (PRD §3).", "error")
             yield
             return
         if not self.job_id:
@@ -537,7 +818,7 @@ class AppState(rx.State):
             content = await f.read()
             try:
                 api.upload_file(
-                    f"/jobs/{self.job_id}/files", filename=f.filename or "upload", content=content,
+                    f"/jobs/{self.job_id}/files", token=self.token, filename=f.filename or "upload", content=content,
                     level=int(self.upload_level), consent_label=self.upload_consent_label,
                     consent_scope=self.upload_consent_scope,
                 )
@@ -566,7 +847,7 @@ class AppState(rx.State):
 
     def add_attendance(self):
         if self.role != "facilitator":
-            self._say("The facilitator enters attendance (PRD §4 stage 0). Switch role at the top.", "error")
+            self._say("The facilitator enters attendance (PRD §4 stage 0).", "error")
             return
         rows = [*self.attendance, {"session": self.att_session, "count": self.att_count}]
         if self._put_attendance(rows):
@@ -575,7 +856,7 @@ class AppState(rx.State):
 
     def remove_attendance(self, i: int):
         if self.role != "facilitator":
-            self._say("The facilitator enters attendance. Switch role at the top.", "error")
+            self._say("The facilitator enters attendance.", "error")
             return
         self._put_attendance([r for r in self.attendance if int(r["i"]) != int(i)])
 
@@ -590,25 +871,46 @@ class AppState(rx.State):
 
     # ---------- Level 2 names ----------
 
+    def _names_by_analyst(self) -> bool:
+        if self.role != "analyst":
+            self._say("The analyst checks the made-up names, so real names stay off the community page. "
+                      "error")
+            return False
+        return True
+
     def add_name(self):
+        if not self._names_by_analyst():
+            return
         if self._api(api.post, f"/jobs/{self.job_id}/names", {"real": self.new_name}) is not None:
             self._say("Name added. Every Level 2 file needs checking again.", "ok")
             self.new_name = ""
             self.refresh()
 
     def remove_name(self, name_id: int):
+        if not self._names_by_analyst():
+            return
         if self._api(api.delete, f"/names/{int(name_id)}") is not None:
             self._say("Name removed. Every Level 2 file needs checking again.", "ok")
             self.refresh()
 
     def mark_names_checked(self, file_id: int):
+        if not self._names_by_analyst():
+            return
         if self._api(api.post, f"/files/{int(file_id)}/names-checked") is not None:
             self._say("Names checked. Re-run stage 4 to sort once every Level 2 file is checked.", "ok")
             self.refresh()
 
     # ---------- pipeline ----------
 
+    def _runs_pipeline(self) -> bool:
+        if self.role not in ("facilitator", "analyst"):
+            self._say("Only the facilitator or the analyst runs stages or resets a job.", "error")
+            return False
+        return True
+
     def reset_job(self):
+        if not self._runs_pipeline():
+            return
         out = self._api(api.post, f"/jobs/{self.job_id}/reset")
         if out is not None:
             self._say(f"Job reset to intake: {out['themes_removed']} theme(s) and every stage's output removed. "
@@ -617,6 +919,8 @@ class AppState(rx.State):
             self.refresh()
 
     def run_stage(self, n: int):
+        if not self._runs_pipeline():
+            return
         out = self._api(api.post, f"/jobs/{self.job_id}/run/{int(n)}")
         if out is not None:
             self.running = True
@@ -644,7 +948,8 @@ class AppState(rx.State):
 
     def save_maker(self):
         if self._api(api.patch, f"/artefacts/{self.maker_edit_id}", {"maker_statement": self.maker_edit_text}) is not None:
-            self._say("Maker's statement saved. Re-run stage 4 to include it.", "ok")
+            self._say("Saved — thank you for telling us what it means." if self.role == "community" else
+                      "Maker's statement saved. Re-run stage 4 to include it.", "ok")
             self.maker_edit_id = 0
             self.refresh()
 
@@ -656,7 +961,9 @@ class AppState(rx.State):
             payload.update(label=self.fix_label, summary=self.fix_summary)
         out = self._api(api.patch, f"/themes/{int(theme_id)}", payload)
         if out is not None:
-            self._say(f"Theme {theme_id}: {action} by {self.role}.", "ok")
+            self._say({"confirm": "Got it — marked as right.", "fix": "Thanks — your wording is saved.",
+                       "reject": "Got it — marked as not right."}.get(action, "Saved.")
+                      if self.role == "community" else f"Theme {theme_id}: {action} by {self.role}.", "ok")
             self.fix_id = 0
             self.fix_note = ""
             self.refresh()
@@ -670,14 +977,16 @@ class AppState(rx.State):
         self.fix_id = 0
 
     def add_theme(self):
-        ids = [int(x) for x in self.add_quote_ids.replace(",", " ").split() if x.strip().isdigit()]
+        typed = [int(x) for x in self.add_quote_ids.replace(",", " ").split() if x.strip().isdigit()]
+        ids = [] if self.add_from_level3 else list(dict.fromkeys([*self.add_pick, *typed]))
         out = self._api(api.post, f"/jobs/{self.job_id}/themes",
                         {"label": self.add_label, "summary": self.add_summary, "quote_unit_ids": ids,
                          "from_level3": self.add_from_level3, "level": int(self.add_level)})
         if out is not None:
             self._say("Theme added by the community.", "ok")
-            self.add_label = self.add_summary = self.add_quote_ids = ""
+            self.add_label = self.add_summary = self.add_quote_ids = self.unit_search = ""
             self.add_from_level3 = False
+            self.add_pick = []
             self.refresh()
 
     def set_people_count(self, theme_id: int, value: str):
@@ -713,7 +1022,8 @@ class AppState(rx.State):
             self._say("Only the community or the analyst approve a report.", "error")
             return
         if self._api(api.post, f"/reports/{int(report_id)}/approve", {"actor_role": self.role}) is not None:
-            self._say(f"Approved by {self.role}.", "ok")
+            self._say("Thank you — you've approved the report for the community." if self.role == "community"
+                      else f"Approved by {self.role}.", "ok")
             self.refresh()
 
     def send_reportback(self):
@@ -730,12 +1040,10 @@ class AppState(rx.State):
         self.chat = []
 
     def load_chat(self):
-        """On-load for the chat tab: take the job and role from the link it was opened with."""
+        """On-load for the chat tab: take the job from the link it was opened with."""
         q = self.router.url.query_parameters
         if q.get("job", "").isdigit():
             self.job_id = int(q["job"])
-        if q.get("role") in ROLES:
-            self.role = q["role"]
         # A backend reload drops a question in flight; don't leave the box locked for good.
         self.chat_busy = False
         return AppState.load_all
@@ -754,10 +1062,10 @@ class AppState(rx.State):
             self.chat = [*self.chat, {"role": "user", "text": question, "sources": [], "has_sources": False}]
             self.chat_input = ""
             self.chat_busy = True
-            job_id, role = self.job_id, self.role
+            job_id, token = self.job_id, self.token
         yield rx.scroll_to("chat-end")
         try:
-            out = await asyncio.to_thread(api.ask, job_id, question, role, history)
+            out = await asyncio.to_thread(api.ask, job_id, question, history, token)
             reply = {"role": "assistant", "text": out.get("answer", ""),
                      "sources": [{**s, "line": f"[{s['id']}] {s['file']} · {s['where']}"}
                                  for s in out.get("sources", [])]}
