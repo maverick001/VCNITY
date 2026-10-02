@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .. import model_choice
 from ..audit import record_call
 from ..config import settings
 from .base import Provider
@@ -63,6 +64,8 @@ def call(
     max_tokens: int = 2000,
     model: str | None = None,
 ) -> str:
+    # The stage's model for this job, unless the caller named one. Level 3 is refused all the same.
+    model = model or model_choice.chosen(session, job_id, stage)
     provider = get_provider(level, redacted=redacted, name_scan=name_scan, model=model)
     out = provider.complete(prompt, system=system, images=images, json_mode=json_mode, max_tokens=max_tokens)
     record_call(

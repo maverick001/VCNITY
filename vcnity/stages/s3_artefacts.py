@@ -19,6 +19,7 @@ import os
 import re
 from pathlib import Path
 
+from .. import model_choice
 from ..config import settings
 from ..models import Artefact, Job, SourceFile
 from ..providers import router
@@ -107,7 +108,7 @@ def run(session, job_id: int, files: list[int] | None = None) -> dict:
             session, job_id=job_id, stage=3, level=sf.level,
             purpose="artefact-verbatim" + ("-l2-local-human-check" if sf.level == 2 else ""),
             prompt=PROMPT_VERBATIM, system=SYSTEM, images=[img], redacted=True, max_tokens=MAX_TOKENS,
-            model=settings.ollama_vision_model,
+            model=model_choice.chosen(session, job_id, 3),
         )
         parsed = parse_vlm(raw)
         fields = {k: parsed[k] for k in ("verbatim_text", "description", "illegible_count")}

@@ -23,7 +23,7 @@ from pathlib import Path
 from flask import Flask, g, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
-from vcnity import ask, audit, auth, db, pipeline
+from vcnity import ask, audit, auth, db, model_choice, pipeline
 from vcnity.config import settings
 from vcnity.models import (Artefact, Concern, IdentifyFlag, Job, Pseudonym, Report, Segment, SourceFile, Theme,
                            Unit)
@@ -50,6 +50,8 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
     "review": (C, A), "approve": (C, A), "export": (A, CL),
     "people_count": (A,), "add_name": (A,), "remove_name": (A,), "names_checked": (A,), "decide": (A,),
     "edit_report": (A,), "send": (A,),
+    # Model names stay off every other role's screen: the facilitator doesn't need them.
+    "model_settings": (A,), "set_model_settings": (A,),
 }
 _lock = threading.Lock()
 
@@ -573,6 +575,30 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
         with db.session() as s:
             c = concerns.sort_concern(s, concern_id, data["category"], material_level=data.get("material_level"))
             return jsonify(_concern(c))
+
+    # ---- which model each step uses (the analyst's) ----
+
+    @app.get("/jobs/<int:job_id>/models")
+    def model_settings(job_id):
+        have = model_choice.available()
+        with db.session() as s:
+            if s.get(Job, job_id) is None:
+                return _err("no such job", 404)
+            done = {int(st["n"]): bool(st["done"]) for st in pipeline.status(s, job_id).get("stages", [])}
+            steps = []
+            for n, (name, kind, does) in model_choice.STEPS.items():
+                options = [{**m, "heavy": m["size_gb"] > model_choice.MEMORY_WARN_GB} for m in have[kind]]
+                steps.append({"stage": n, "name": name, "kind": kind, "does": does,
+                              "chosen": model_choice.chosen(s, job_id, n), "default": model_choice.default_for(n),
+                              "done": done.get(n, False), "options": options})
+        return jsonify({"steps": steps, "ollama_error": have["ollama_error"],
+                        "memory_warn_gb": model_choice.MEMORY_WARN_GB})
+
+    @app.put("/jobs/<int:job_id>/models")
+    def set_model_settings(job_id):
+        data = request.get_json(force=True) or {}
+        with db.session() as s:
+            return jsonify({"models": model_choice.set_choices(s, job_id, data.get("models", {}))})
 
     # ---- audit & word list ----
 

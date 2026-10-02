@@ -38,6 +38,8 @@ class Job(Base):
     # How many people came to each session, entered by the facilitator: [{"session": str, "count": int}].
     # The total is the "of M" in the report (PRD §4 stage 0, A6).
     attendance: Mapped[list] = mapped_column(JSON, default=list)
+    # The analyst's model per step for this job: {"2": "large-v3", "4": "qwen3.5:4b", ...}. See model_choice.py.
+    models: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     files: Mapped[list["SourceFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")

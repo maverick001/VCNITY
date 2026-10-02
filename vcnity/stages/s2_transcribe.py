@@ -17,31 +17,35 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from .. import model_choice
 from ..audit import record_call
 from ..config import settings
 from ..models import Job, Segment, SourceFile
 from ..wordlist import as_hotwords, load_wordlist
 from ._gate import ai_allowed, why_not
 
-import os
-
 # large-v3 is the recommendation for accented, multilingual, far-field audio.
 # large-v3-turbo is ~4x faster and ~1 GB smaller if the laptop is short of RAM.
-ASR_MODEL = os.environ.get("VCNITY_ASR_MODEL", "large-v3")
+# The default; the analyst can pick another downloaded one per job (model_choice.py).
+ASR_MODEL = model_choice.DEFAULT_SPEECH
 # Segment confidence is exp(avg_logprob), so the PRD's confidence threshold is a log-prob of ln(threshold).
 UNSURE_LOGPROB = math.log(settings.unsure_confidence)
 UNSURE_NO_SPEECH = 0.6
 
 _model = None
+_model_name = ""
 
 
-def _asr():
-    global _model
-    if _model is None:
+def _asr(name: str = ASR_MODEL):
+    """One speech model in memory at a time: a different one replaces it rather than joining it."""
+    global _model, _model_name
+    if _model is None or _model_name != name:
         from faster_whisper import WhisperModel
 
-        _model = WhisperModel(ASR_MODEL, device="cpu", compute_type="int8",
+        _model = None  # let the old one go before the new one loads — 16GB, no GPU
+        _model = WhisperModel(name, device="cpu", compute_type="int8",
                               download_root=str(settings.cache_dir / "models"))
+        _model_name = name
     return _model
 
 
@@ -50,8 +54,9 @@ def flag_unsure(seg: dict, logprob_threshold: float = UNSURE_LOGPROB,
     return seg["avg_logprob"] < logprob_threshold or seg["no_speech_prob"] > no_speech_threshold
 
 
-def transcribe_wav(wav: Path, hotwords: str | None = None, initial_prompt: str | None = None) -> list[dict]:
-    model = _asr()
+def transcribe_wav(wav: Path, hotwords: str | None = None, initial_prompt: str | None = None,
+                   model_name: str = ASR_MODEL) -> list[dict]:
+    model = _asr(model_name)
     segments, _info = model.transcribe(
         str(wav),
         beam_size=5,
@@ -88,7 +93,8 @@ def run(session, job_id: int, variants=("with_wordlist", "without"), files: list
     hot = as_hotwords(words)
     prompt = ("A community co-design session in Queensland, Australia. "
               f"Names and places that may come up: {hot}.") if words else None
-    report: dict = {"files": [], "model": ASR_MODEL}
+    asr_name = model_choice.chosen(session, job_id, 2)
+    report: dict = {"files": [], "model": asr_name}
     q = session.query(SourceFile).filter_by(job_id=job_id, kind="audio")
     if files:
         q = q.filter(SourceFile.id.in_(files))
@@ -112,14 +118,14 @@ def run(session, job_id: int, variants=("with_wordlist", "without"), files: list
                 session.query(Segment).filter_by(file_id=sf.id, variant=variant).delete(synchronize_session=False)
             use_words = variant == "with_wordlist"
             segs = transcribe_wav(wav, hotwords=hot if use_words else None,
-                                  initial_prompt=prompt if use_words else None)
+                                  initial_prompt=prompt if use_words else None, model_name=asr_name)
             for s in segs:
                 session.add(Segment(
                     file_id=sf.id, variant=variant, start_s=s["start"], end_s=s["end"], text=s["text"],
                     confidence=round(math.exp(s["avg_logprob"]), 3), unsure=flag_unsure(s),
                 ))
-            record_call(session, job_id=job_id, stage=2, provider=f"faster-whisper:{ASR_MODEL}",
-                        is_local=True, level=sf.level, model=ASR_MODEL,
+            record_call(session, job_id=job_id, stage=2, provider=f"faster-whisper:{asr_name}",
+                        is_local=True, level=sf.level, model=asr_name,
                         purpose=f"asr-{variant}" + ("-l2-local-human-check" if sf.level == 2 else ""))
             session.commit()  # bank this variant now; a kill mid-run keeps it
             entry[variant] = len(segs)

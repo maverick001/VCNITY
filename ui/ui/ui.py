@@ -216,6 +216,15 @@ def stage_nav() -> rx.Component:
                           align="center"),
                 href="/pipeline", underline="none", **_nav_style(overview_active)),
         rx.foreach(AppState.stage_names, item),
+        # Model names are the analyst's business; the facilitator never sees this link or the page.
+        rx.cond(AppState.role == "analyst",
+                rx.vstack(rx.divider(margin_y="8px"),
+                          rx.link(rx.hstack(rx.icon("cpu", size=16), rx.text("Model settings", size="2"),
+                                            spacing="2", align="center"),
+                                  href="/models", underline="none",
+                                  **_nav_style(AppState.router.page.path == "/models")),
+                          spacing="1", width="100%"),
+                rx.fragment()),
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
                   rx.text("waiting for a person", size="1", color="gray"), spacing="2", align="center"),
@@ -905,6 +914,57 @@ def reportback_page() -> rx.Component:
     )
 
 
+# ---------------------------------------------------------------- model settings (analyst)
+
+def model_step_card(st) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(rx.text(st["title"], weight="bold"),
+                      rx.cond(st["is_default"], rx.badge("default", color_scheme="gray"), rx.fragment()),
+                      rx.cond(st["done"], rx.badge("already run", color_scheme="blue"), rx.fragment()),
+                      align="center", spacing="2", wrap="wrap"),
+            rx.text(st["does"], size="2", color="gray"),
+            rx.cond(
+                st["options"].to(list).length() > 0,
+                rx.select.root(
+                    rx.select.trigger(min_width="320px"),
+                    rx.select.content(rx.foreach(st["options"].to(list[dict[str, Any]]),
+                                                 lambda o: rx.select.item(o["label"], value=o["name"]))),
+                    value=st["chosen"].to(str),
+                    on_change=lambda v: AppState.set_model(st["stage"], v)),
+                rx.text("No model of this kind on this laptop.", size="2", color="var(--red-11)")),
+            rx.cond(st["missing"] & (st["options"].to(list).length() > 0),
+                    rx.callout(rx.text(st["chosen"], " isn't on this laptop any more. Pick another before this "
+                                                     "step runs."), icon="triangle-alert", color_scheme="red",
+                               size="1"),
+                    rx.fragment()),
+            rx.cond(st["heavy"],
+                    rx.callout("This model is large for a 16GB laptop. It may run slowly or not load while the "
+                               "rest of the app is open.", icon="triangle-alert", color_scheme="amber", size="1"),
+                    rx.fragment()),
+            rx.cond(st["done"],
+                    rx.text("Changing it doesn't touch what this step already made. Re-run it, and the steps "
+                            "after it, to use the new model.", size="1", color="gray"),
+                    rx.fragment()),
+            spacing="2", align="start", width="100%"),
+        width="100%")
+
+
+def models_page() -> rx.Component:
+    return page(
+        "Model settings",
+        rx.text("Which model each step uses for this job. Only models already on this laptop are listed — nothing "
+                "is sent outside it. Level 3 material never reaches any model, whatever is picked here. Only you "
+                "see this page.", color="gray"),
+        rx.cond(AppState.model_error != "",
+                rx.callout(AppState.model_error, icon="plug-zap", color_scheme="amber", width="100%"),
+                rx.fragment()),
+        rx.foreach(AppState.model_steps, model_step_card),
+        rx.text("Sign-off (6) has no model: people do it. The chat and the report-back use the default text model.",
+                size="1", color="gray"),
+    )
+
+
 # ---------------------------------------------------------------- sign in
 
 def login_page() -> rx.Component:
@@ -979,3 +1039,5 @@ for route, component in [("/", intake_page), ("/pipeline", pipeline_page), ("/tr
     app.add_page(component, route=route, on_load=AppState.load_all, title="VCNITY pipeline")
 app.add_page(chat_page, route="/chat", on_load=AppState.load_chat, title="Chat with Data · VCNITY")
 app.add_page(login_page, route="/login", on_load=AppState.load_login, title="Sign in · VCNITY")
+app.add_page(models_page, route="/models", on_load=[AppState.load_all, AppState.load_models],
+             title="Model settings · VCNITY")

@@ -120,6 +120,10 @@ class AppState(rx.State):
     add_pick: list[int] = []
     unit_search: str = ""
 
+    # model settings (the analyst's page)
+    model_steps: list[dict[str, Any]] = []
+    model_error: str = ""
+
     # community page
     file_previews: dict[str, str] = {}
     new_word: str = ""
@@ -490,6 +494,8 @@ class AppState(rx.State):
         if self.role in ROLE_HOME and path != home:
             return rx.redirect(home)
         if self.role not in ROLE_HOME and path in ROLE_HOME.values():
+            return rx.redirect("/")
+        if path == "/models" and self.role != "analyst":  # model names are the analyst's business only
             return rx.redirect("/")
         return None
 
@@ -1030,6 +1036,36 @@ class AppState(rx.State):
         if self._api(api.post, f"/reports/{int(self.reportback['id'])}/send") is not None:
             self._say("Report-back marked as sent.", "ok")
             self.refresh()
+
+    # ---------- model settings ----------
+
+    def load_models(self):
+        if self.role != "analyst" or not self.job_id:
+            return
+        out = self._api(api.get, f"/jobs/{self.job_id}/models")
+        if out is None:
+            return
+        self.model_error = out.get("ollama_error", "")
+        steps = []
+        for st in out["steps"]:
+            opts = [{**o, "label": f"{o['name']} · {o['size_gb']} GB" + (" · may not fit in memory" if o["heavy"] else "")}
+                    for o in st["options"]]
+            picked = next((o for o in opts if o["name"] == st["chosen"]), None)
+            steps.append({**st, "options": opts, "title": f"{st['stage']} · {st['name']}",
+                          "is_default": st["chosen"] == st["default"],
+                          "missing": picked is None,  # the pick, or the default, isn't on this laptop any more
+                          "heavy": bool(picked and picked["heavy"])})
+        self.model_steps = steps
+
+    def set_model(self, stage: int, model: str):
+        out = self._api(api.put, f"/jobs/{self.job_id}/models", {"models": {str(int(stage)): model}})
+        if out is None:
+            return
+        step = next((s for s in self.model_steps if int(s["stage"]) == int(stage)), {})
+        self._say(f"{step.get('name', 'Step')} now uses {model}." +
+                  (f" Stage {stage} has already run with the old one — re-run it, and the stages after it, "
+                   "to use the new one." if step.get("done") else ""), "ok")
+        self.load_models()
 
     # ---------- chat with the data ----------
 
