@@ -87,6 +87,14 @@ def test_sizes_read_as_parameters_not_disk():
     assert model_choice.SPEECH_PARAMS["large-v3-turbo"] == "0.81B"
 
 
+def test_speech_models_show_their_full_name():
+    from vcnity import model_choice
+
+    assert model_choice.display_name("speech", "large-v3") == "faster-whisper-large-v3"
+    assert model_choice.display_name("speech", "faster-whisper-large-v3") == "faster-whisper-large-v3"
+    assert model_choice.display_name("text", "qwen3.5:4b") == "qwen3.5:4b"
+
+
 def test_only_the_analyst_sees_or_changes_models(pg_uri, fake_models):
     from api.app import create_app
     from vcnity import auth, db

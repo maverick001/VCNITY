@@ -590,8 +590,10 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
             steps = []
             for n, (name, kind, does) in model_choice.STEPS.items():
                 options = [{**m, "heavy": m["size_gb"] > model_choice.MEMORY_WARN_GB} for m in have[kind]]
+                chosen = model_choice.chosen(s, job_id, n)
                 steps.append({"stage": n, "name": name, "kind": kind, "does": does,
-                              "chosen": model_choice.chosen(s, job_id, n), "default": model_choice.default_for(n),
+                              "chosen": chosen, "chosen_display": model_choice.display_name(kind, chosen),
+                              "default": model_choice.default_for(n),
                               "done": done.get(n, False), "options": options})
         return jsonify({"steps": steps, "ollama_error": have["ollama_error"],
                         "memory_warn_gb": model_choice.MEMORY_WARN_GB})

@@ -40,6 +40,11 @@ SPEECH_PARAMS = {
 }
 
 
+def display_name(kind: str, name: str) -> str:
+    """What the analyst sees. faster-whisper knows its models by short names ("large-v3"); show the full one."""
+    return f"faster-whisper-{name}" if kind == "speech" and not name.startswith("faster-whisper-") else name
+
+
 def _params_b(text: str | None) -> str:
     """Ollama's parameter size ("4.7B", "809M") in billions, so every model reads the same way."""
     text = (text or "").strip().upper()
@@ -77,8 +82,8 @@ def speech_models() -> list[dict]:
         folder = cache / f"models--{repo.replace('/', '--')}"
         if repo not in seen and any(folder.glob("snapshots/*/model.bin")):
             seen.add(repo)
-            out.append({"name": name, "size_gb": _folder_gb(folder), "source": repo,
-                        "params": SPEECH_PARAMS.get(name.removesuffix(".en"), "")})
+            out.append({"name": name, "display": display_name("speech", name), "size_gb": _folder_gb(folder),
+                        "source": repo.split("/")[0], "params": SPEECH_PARAMS.get(name.removesuffix(".en"), "")})
     return out
 
 
@@ -92,7 +97,7 @@ def ollama_models() -> tuple[list[dict], list[dict], str]:
         for m in client.list().models:
             info = client.show(m.model)
             caps = list(getattr(info, "capabilities", None) or [])
-            row = {"name": m.model, "size_gb": round((m.size or 0) / 1e9, 1), "source": "Ollama",
+            row = {"name": m.model, "display": m.model, "size_gb": round((m.size or 0) / 1e9, 1), "source": "Ollama",
                    "params": _params_b(getattr(getattr(info, "details", None), "parameter_size", None))}
             if "vision" in caps:
                 vision.append(row)

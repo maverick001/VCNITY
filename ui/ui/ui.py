@@ -219,7 +219,7 @@ def stage_nav() -> rx.Component:
         # Model names are the analyst's business; the facilitator never sees this link or the page.
         rx.cond(AppState.role == "analyst",
                 rx.vstack(rx.divider(margin_y="8px"),
-                          rx.link(rx.hstack(rx.icon("cpu", size=16), rx.text("Model settings", size="2"),
+                          rx.link(rx.hstack(rx.icon("cpu", size=16), rx.text("Model Configuration", size="2"),
                                             spacing="2", align="center"),
                                   href="/models", underline="none",
                                   **_nav_style(AppState.router.page.path == "/models")),
@@ -939,7 +939,7 @@ def model_step_card(st) -> rx.Component:
                     on_change=lambda v: AppState.set_model(st["stage"], v)),
                 rx.text("No model of this kind on this laptop.", size="2", color="var(--red-11)")),
             rx.cond(st["missing"] & (st["options"].to(list).length() > 0),
-                    rx.callout(rx.text(st["chosen"], " isn't on this laptop any more. Pick another before this "
+                    rx.callout(rx.text(st["chosen_display"], " isn't on this laptop any more. Pick another before this "
                                                      "step runs."), icon="triangle-alert", color_scheme="red",
                                size="1"),
                     rx.fragment()),
@@ -957,7 +957,7 @@ def model_step_card(st) -> rx.Component:
 
 def models_page() -> rx.Component:
     return page(
-        "Model settings",
+        "Model Configuration",
         rx.text("Which model each step uses for this job. Only models already on this laptop are listed — nothing "
                 "is sent outside it. Level 3 material never reaches any model, whatever is picked here. Only you "
                 "see this page.", color="gray"),
@@ -1045,4 +1045,4 @@ for route, component in [("/", intake_page), ("/pipeline", pipeline_page), ("/tr
 app.add_page(chat_page, route="/chat", on_load=AppState.load_chat, title="Chat with Data · VCNITY")
 app.add_page(login_page, route="/login", on_load=AppState.load_login, title="Sign in · VCNITY")
 app.add_page(models_page, route="/models", on_load=[AppState.load_all, AppState.load_models],
-             title="Model settings · VCNITY")
+             title="Model Configuration · VCNITY")

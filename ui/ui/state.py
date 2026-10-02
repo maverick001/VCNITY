@@ -1049,10 +1049,16 @@ class AppState(rx.State):
         self.model_error = out.get("ollama_error", "")
         steps = []
         for st in out["steps"]:
-            # Name, where it came from, and its parameter count ("1.55B") — not its size on disk.
-            opts = [{**o, "label": " · ".join(x for x in (o["name"], o.get("source", ""), o.get("params", ""),
-                                                          "may not fit in memory" if o["heavy"] else "") if x)}
-                    for o in st["options"]]
+            # "faster-whisper-large-v3 (1.55B) · Systran · 3.1 GB": name with its parameter count, where it came
+            # from, and its size on disk.
+            def label(o):
+                name = o.get("display") or o["name"]
+                if o.get("params"):
+                    name += f" ({o['params']})"
+                return " · ".join(x for x in (name, o.get("source", ""), f"{o['size_gb']} GB",
+                                              "may not fit in memory" if o["heavy"] else "") if x)
+
+            opts = [{**o, "label": label(o)} for o in st["options"]]
             picked = next((o for o in opts if o["name"] == st["chosen"]), None)
             steps.append({**st, "options": opts, "title": f"{st['stage']} · {st['name']}",
                           "is_default": st["chosen"] == st["default"],
@@ -1065,7 +1071,8 @@ class AppState(rx.State):
         if out is None:
             return
         step = next((s for s in self.model_steps if int(s["stage"]) == int(stage)), {})
-        self._say(f"{step.get('name', 'Step')} now uses {model}." +
+        shown = next((o.get("display") or o["name"] for o in step.get("options", []) if o["name"] == model), model)
+        self._say(f"{step.get('name', 'Step')} now uses {shown}." +
                   (f" Stage {stage} has already run with the old one — re-run it, and the stages after it, "
                    "to use the new one." if step.get("done") else ""), "ok")
         self.load_models()
