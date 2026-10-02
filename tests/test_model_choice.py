@@ -77,6 +77,16 @@ def test_router_uses_the_jobs_pick(db_session, fake_models, monkeypatch):
         router.call(db_session, job_id=job.id, stage=5, level=3, purpose="t", prompt="x")
 
 
+def test_sizes_read_as_parameters_not_disk():
+    from vcnity import model_choice
+
+    assert model_choice._params_b("4.7B") == "4.7B"
+    assert model_choice._params_b("809M") == "0.81B"
+    assert model_choice._params_b(None) == "" and model_choice._params_b("?") == ""
+    assert model_choice.SPEECH_PARAMS["large-v3"] == "1.55B"  # 3.1 GB on disk
+    assert model_choice.SPEECH_PARAMS["large-v3-turbo"] == "0.81B"
+
+
 def test_only_the_analyst_sees_or_changes_models(pg_uri, fake_models):
     from api.app import create_app
     from vcnity import auth, db

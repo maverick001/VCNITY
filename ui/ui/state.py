@@ -1049,7 +1049,9 @@ class AppState(rx.State):
         self.model_error = out.get("ollama_error", "")
         steps = []
         for st in out["steps"]:
-            opts = [{**o, "label": f"{o['name']} · {o['size_gb']} GB" + (" · may not fit in memory" if o["heavy"] else "")}
+            # Name, where it came from, and its parameter count ("1.55B") — not its size on disk.
+            opts = [{**o, "label": " · ".join(x for x in (o["name"], o.get("source", ""), o.get("params", ""),
+                                                          "may not fit in memory" if o["heavy"] else "") if x)}
                     for o in st["options"]]
             picked = next((o for o in opts if o["name"] == st["chosen"]), None)
             steps.append({**st, "options": opts, "title": f"{st['stage']} · {st['name']}",

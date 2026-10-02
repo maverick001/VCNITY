@@ -29,6 +29,27 @@ STEPS: dict[int, tuple[str, str, str]] = {
 # 16GB of RAM, no GPU, and the app and database need room too. Above this, warn before it's picked.
 MEMORY_WARN_GB = 8.0
 
+# Parameter counts for faster-whisper's models, from OpenAI's Whisper model card and the distil-whisper
+# cards. The downloaded files don't say, and the size on disk isn't the same thing.
+SPEECH_PARAMS = {
+    "tiny": "0.04B", "base": "0.07B", "small": "0.24B", "medium": "0.77B",
+    "large-v1": "1.55B", "large-v2": "1.55B", "large-v3": "1.55B", "large": "1.55B",
+    "large-v3-turbo": "0.81B", "turbo": "0.81B",
+    "distil-small.en": "0.17B", "distil-medium.en": "0.39B", "distil-large-v2": "0.76B",
+    "distil-large-v3": "0.76B", "distil-large-v3.5": "0.76B",
+}
+
+
+def _params_b(text: str | None) -> str:
+    """Ollama's parameter size ("4.7B", "809M") in billions, so every model reads the same way."""
+    text = (text or "").strip().upper()
+    if text.endswith("M"):
+        try:
+            return f"{float(text[:-1]) / 1000:.2f}B"
+        except ValueError:
+            return ""
+    return text if text.endswith("B") else ""
+
 
 def default_for(stage: int) -> str:
     kind = STEPS.get(stage, ("", "text", ""))[1]
@@ -56,7 +77,8 @@ def speech_models() -> list[dict]:
         folder = cache / f"models--{repo.replace('/', '--')}"
         if repo not in seen and any(folder.glob("snapshots/*/model.bin")):
             seen.add(repo)
-            out.append({"name": name, "size_gb": _folder_gb(folder)})
+            out.append({"name": name, "size_gb": _folder_gb(folder), "source": repo,
+                        "params": SPEECH_PARAMS.get(name.removesuffix(".en"), "")})
     return out
 
 
@@ -68,8 +90,10 @@ def ollama_models() -> tuple[list[dict], list[dict], str]:
         client = ollama.Client()
         text, vision = [], []
         for m in client.list().models:
-            caps = list(getattr(client.show(m.model), "capabilities", None) or [])
-            row = {"name": m.model, "size_gb": round((m.size or 0) / 1e9, 1)}
+            info = client.show(m.model)
+            caps = list(getattr(info, "capabilities", None) or [])
+            row = {"name": m.model, "size_gb": round((m.size or 0) / 1e9, 1), "source": "Ollama",
+                   "params": _params_b(getattr(getattr(info, "details", None), "parameter_size", None))}
             if "vision" in caps:
                 vision.append(row)
             if "completion" in caps:
