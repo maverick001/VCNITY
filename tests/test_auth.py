@@ -94,3 +94,15 @@ def test_links_carry_the_token(client):
     token = fac["Authorization"].removeprefix("Bearer ")
     assert client.get(f"/files/{fid}/media").status_code == 401
     assert client.get(f"/files/{fid}/media?t={token}").status_code == 200
+
+def test_only_the_analyst_runs_the_pipeline(client):
+    # PRD §3: the facilitator uploads, sets levels and enters attendance, and does no analyst work.
+    ids = _users([("fac5", "facilitator", None), ("ana5", "analyst", None)])
+    fac = _sign_in(client, "fac5")
+    for method, path in [("post", f"/jobs/{ids[0]}/run/1"), ("post", f"/jobs/{ids[0]}/reset"),
+                         ("get", f"/jobs/{ids[0]}/names"), ("get", f"/jobs/{ids[0]}/flags"),
+                         ("get", f"/jobs/{ids[0]}/themes/unsupported")]:
+        assert getattr(client, method)(path, headers=fac).status_code == 403, path
+    assert client.get(f"/jobs/{ids[0]}/status", headers=fac).status_code == 200
+    ana = _sign_in(client, "ana5")
+    assert client.post(f"/jobs/{ids[0]}/reset", headers=ana).status_code == 200

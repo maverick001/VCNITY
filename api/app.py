@@ -42,8 +42,10 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
     "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
     "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, C),
     "preview": (F, C, A), "media": (F, C, A), "get_wordlist": (F, C, A), "put_wordlist": (F, C, A),
-    "run_stage": STAFF, "reset_job": STAFF, "status": STAFF, "segments": STAFF, "compare": STAFF,
-    "compare_with_reference": STAFF, "unsupported": STAFF, "names": STAFF, "flags": STAFF,
+    "status": STAFF, "segments": STAFF,
+    # Running the pipeline is analyst work; the facilitator uploads, sets levels and enters attendance (PRD §3).
+    "run_stage": (A,), "reset_job": (A,), "compare": (A,), "compare_with_reference": (A,),
+    "unsupported": (A,), "names": (A,), "flags": (A,),
     "ask_question": STAFF, "list_concerns": STAFF, "raise_concern": STAFF, "sort_concern": STAFF,
     "artefacts": (F, C, A), "artefact_image": (F, C, A), "maker_statement": (F, C, A),
     "themes": (F, C, A), "units": (F, C, A), "job_audit": (F, C, A),

@@ -545,6 +545,7 @@ class AppState(rx.State):
             return
         self.job = j
         staff = self.role in ("facilitator", "analyst")
+        analyst = self.role == "analyst"
         self.attendance = [{**r, "i": i, "line": f"{r['session']}: {r['count']}"}
                            for i, r in enumerate(j.get("attendance", []))]
         self.files = j.get("files", [])
@@ -571,8 +572,8 @@ class AppState(rx.State):
         self.themes = [self._shape_theme(t) for t in (self._api(api.get, f"/jobs/{self.job_id}/themes") or [])]
         self.unsupported = [{**u, "line": f"{u['label']} — {u['review_note']}"}
                             for u in ((self._api(api.get, f"/jobs/{self.job_id}/themes/unsupported") or [])
-                                      if staff else [])]
-        nm = (self._api(api.get, f"/jobs/{self.job_id}/names") or {}) if staff else {}
+                                      if analyst else [])]
+        nm = (self._api(api.get, f"/jobs/{self.job_id}/names") or {}) if analyst else {}
         self.names = [{**n, "line": f"{n['real']} → {n['fake']}  ({n['source']})"} for n in nm.get("names", [])]
         self.name_files = [{**f, "units": [{**u, "line": f"#{u['id']} {u['text']}"} for u in f["units"]],
                             "units_header": f"What sorting will see ({len(f['units'])})"}
@@ -580,7 +581,7 @@ class AppState(rx.State):
         self.units = [{**u, "line": f"#{u['id']} [{u['speaker']}] {u['text']}"}
                       for u in (self._api(api.get, f"/jobs/{self.job_id}/units") or [])]
         self.flags = [{**f, "decision_text": f"Decision: {f['decision']} — {f['reason']}" if f["decision"] else ""}
-                      for f in ((self._api(api.get, f"/jobs/{self.job_id}/flags") or []) if staff else [])]
+                      for f in ((self._api(api.get, f"/jobs/{self.job_id}/flags") or []) if analyst else [])]
         self._load_reports()
         self.concerns = [{**c, "stage_text": f"stage {c['stage']}",
                           "routed_text": f"Routed to: {c['routed_to']} · treated as Level {c['level']}" if c["routed_to"] else ""}
@@ -621,7 +622,7 @@ class AppState(rx.State):
         allo = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="without") or []
         self.segments_with = [self._shape_segment(s) for s in allw if s["file_id"] == fid]
         self.segments_without = [self._shape_segment(s) for s in allo if s["file_id"] == fid]
-        cmp = self._api(api.get, f"/jobs/{self.job_id}/compare/{fid}") or {}
+        cmp = (self._api(api.get, f"/jobs/{self.job_id}/compare/{fid}") or {}) if self.role == "analyst" else {}
         self.compare = {k: v for k, v in cmp.items() if k != "diff"}
         self.diff = cmp.get("diff", [])
 
@@ -903,8 +904,8 @@ class AppState(rx.State):
     # ---------- pipeline ----------
 
     def _runs_pipeline(self) -> bool:
-        if self.role not in ("facilitator", "analyst"):
-            self._say("Only the facilitator or the analyst runs stages or resets a job.", "error")
+        if self.role != "analyst":
+            self._say("Only the analyst runs stages or resets a job.", "error")
             return False
         return True
 
