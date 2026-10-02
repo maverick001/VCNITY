@@ -287,8 +287,11 @@ def message_bar() -> rx.Component:
 
 
 def rerun_button(n: int, label: str = "Re-run this stage") -> rx.Component:
-    return rx.button(rx.cond(AppState.running, "running…", label), on_click=AppState.run_stage(n),
-                     disabled=AppState.running, variant="outline")
+    # Only the analyst runs stages (PRD §3: the facilitator does no analyst work).
+    return rx.cond(AppState.role == "analyst",
+                   rx.button(rx.cond(AppState.running, "running…", label), on_click=AppState.run_stage(n),
+                             disabled=AppState.running, variant="outline"),
+                   rx.fragment())
 
 
 def page(title: str, *children) -> rx.Component:
@@ -504,8 +507,10 @@ def stage_card(s) -> rx.Component:
                               color="gray"),
                       spacing="1", align="start"),
             rx.spacer(),
-            rx.button("Run", size="1", variant="outline", on_click=AppState.run_stage(s["n"]),
-                      disabled=AppState.running),
+            rx.cond(AppState.role == "analyst",
+                    rx.button("Run", size="1", variant="outline", on_click=AppState.run_stage(s["n"]),
+                              disabled=AppState.running),
+                    rx.fragment()),
             align="center", width="100%"),
         width="100%")
 
@@ -551,7 +556,7 @@ def pipeline_page() -> rx.Component:
                 rx.fragment()),
         rx.foreach(AppState.stage_names, stage_card),
         rx.card(rx.heading("Job status", size="3"), rx.text(AppState.status_line, size="2"), width="100%"),
-        reset_card(),
+        rx.cond(AppState.role == "analyst", reset_card(), rx.fragment()),
         rx.moment(interval=3000, on_change=AppState.poll, display="none"),
     )
 
@@ -585,7 +590,7 @@ def transcript_page() -> rx.Component:
             rx.text("Recording:"),
             rx.select(AppState.audio_options, value=AppState.selected_file_id.to(str), on_change=AppState.select_file),
             rerun_button(2), align="center"),
-        rx.card(
+        rx.cond(AppState.role == "analyst", rx.card(
             rx.heading("What the community word list changed", size="3"),
             rx.text(AppState.compare_line, size="2"),
             rx.text(AppState.compare_note, size="1", color="gray"),
@@ -597,7 +602,7 @@ def transcript_page() -> rx.Component:
                       rx.cond(AppState.has_reference_wer,
                               rx.text(AppState.reference_wer_line, size="2", weight="bold"), rx.fragment())),
             rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
-            width="100%"),
+            width="100%"), rx.fragment()),
         rx.hstack(
             rx.card(rx.heading("With word list (used downstream)", size="3"),
                     rx.vstack(rx.foreach(AppState.segments_with, seg_row), spacing="1", max_height="520px",
