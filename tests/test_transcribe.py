@@ -27,6 +27,20 @@ def test_flag_unsure():
     assert s2_transcribe.flag_unsure({"avg_logprob": -0.3, "no_speech_prob": 0.7}) is True
 
 
+def test_load_wav_gives_pyannote_a_waveform(tmp_path):
+    import struct
+    import wave
+
+    p = tmp_path / "a.wav"
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+        w.writeframes(struct.pack("<3h", 0, 16384, -32768))
+    out = s2b_diarise._load_wav(p)
+    assert out["sample_rate"] == 16000
+    assert tuple(out["waveform"].shape) == (1, 3)   # (channel, time), what pyannote expects
+    assert out["waveform"].tolist() == [[0.0, 0.5, -1.0]]
+
+
 def test_merge_speakers_by_overlap():
     segs = [SimpleNamespace(start_s=0.0, end_s=2.0, speaker=None),
             SimpleNamespace(start_s=2.5, end_s=4.0, speaker=None),

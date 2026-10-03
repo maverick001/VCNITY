@@ -5,6 +5,7 @@ leaves speakers blank rather than failing the pipeline.
 from __future__ import annotations
 
 import logging
+import wave
 from pathlib import Path
 
 from ..audit import record_call
@@ -26,11 +27,25 @@ def _pipe():
     return _pipeline
 
 
+def _load_wav(wav: Path) -> dict:
+    """Stage 1's 16 kHz mono 16-bit WAV, as the in-memory form pyannote accepts.
+    Handing pyannote a path makes it decode with torchcodec, which needs FFmpeg's
+    shared DLLs on Windows; the app avoids a system FFmpeg (stage 1 uses PyAV)."""
+    import numpy as np
+    import torch
+
+    with wave.open(str(wav), "rb") as w:
+        sr, ch = w.getframerate(), w.getnchannels()
+        x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype(np.float32) / 32768.0
+    x = x.reshape(-1, ch).T  # (channel, time)
+    return {"waveform": torch.from_numpy(np.ascontiguousarray(x)), "sample_rate": sr}
+
+
 def diarise(wav: Path) -> list[tuple[float, float, str]]:
     if not settings.hf_token:
         log.warning("HF_TOKEN not set — skipping diarisation (see app/.env.example)")
         return []
-    result = _pipe()(str(wav))
+    result = _pipe()(_load_wav(wav))
     # pyannote 4 returns a DiarizeOutput; 3.x returned an Annotation directly.
     ann = getattr(result, "speaker_diarization", result)
     turns = []
