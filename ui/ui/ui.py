@@ -603,6 +603,11 @@ def transcript_page() -> rx.Component:
                               rx.text(AppState.reference_wer_line, size="2", weight="bold"), rx.fragment())),
             rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
             width="100%"), rx.fragment()),
+        rx.cond(AppState.speakers_missing,
+                rx.callout("Speakers not identified for this recording, so every line shows \"?\" instead of who "
+                           "spoke. The analyst can re-run stage 2 to try again.",
+                           icon="triangle-alert", color_scheme="amber", width="100%"),
+                rx.fragment()),
         rx.hstack(
             rx.card(rx.heading("With word list (used downstream)", size="3"),
                     rx.vstack(rx.foreach(AppState.segments_with, seg_row), spacing="1", max_height="520px",

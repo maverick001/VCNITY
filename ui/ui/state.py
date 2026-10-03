@@ -252,6 +252,11 @@ class AppState(rx.State):
         return bool(self.reportback.get("id"))
 
     @rx.var
+    def speakers_missing(self) -> bool:
+        """A transcript where no line has a speaker: diarisation was skipped or failed for this recording."""
+        return bool(self.segments_with) and not any(s["speaker"] for s in self.segments_with)
+
+    @rx.var
     def has_reference_wer(self) -> bool:
         return "wer_with_vs_reference" in self.compare
 
