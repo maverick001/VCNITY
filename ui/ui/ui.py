@@ -155,7 +155,7 @@ def chat_page() -> rx.Component:
         height="100vh", width="100%", spacing="0", background_color=PAGE_BG)
 
 
-def audit_panel() -> rx.Component:
+def audit_panel(show_prd_note: bool = True) -> rx.Component:
     return rx.card(
         rx.hstack(
             rx.cond(AppState.audit_ok,
@@ -164,7 +164,7 @@ def audit_panel() -> rx.Component:
             rx.cond(AppState.audit_ok,
                     rx.badge("Level 3 → AI: 0 · hosted calls on L2+: 0", color_scheme="green", size="2"),
                     rx.badge("AUDIT BREACH", color_scheme="red", size="2")),
-            rx.text("PRD §5: zero, no exceptions", size="1", color="gray"),
+            rx.text("PRD §5: zero, no exceptions", size="1", color="gray") if show_prd_note else rx.fragment(),
             rx.text(AppState.audit_total_text, size="1", color="gray"),
             spacing="3", align="center"),
         size="1", padding="12px 16px")
@@ -261,9 +261,10 @@ def user_chip() -> rx.Component:
         align="center", spacing="2")
 
 
-def top_bar(title: str, show_jobs: bool = True) -> rx.Component:
+def top_bar(title: str, show_jobs: bool = True, beside_title: rx.Component | None = None) -> rx.Component:
     return rx.hstack(
         rx.heading(title, size="6", weight="bold"),
+        beside_title if beside_title is not None else rx.fragment(),
         rx.spacer(),
         user_chip(),
         rx.cond(AppState.jobs.length() > 1,
@@ -294,10 +295,11 @@ def rerun_button(n: int, label: str = "Re-run this stage") -> rx.Component:
                    rx.fragment())
 
 
-def page(title: str, *children) -> rx.Component:
+def page(title: str, *children, beside_title: rx.Component | None = None,
+         show_prd_note: bool = True) -> rx.Component:
     return rx.hstack(
         stage_nav(),
-        rx.vstack(top_bar(title), audit_panel(), message_bar(), *children,
+        rx.vstack(top_bar(title, beside_title=beside_title), audit_panel(show_prd_note), message_bar(), *children,
                   spacing="4", width="100%", padding="32px", max_width="1200px"),
         align="start", width="100%", spacing="0", min_height="100vh", background_color=PAGE_BG)
 
@@ -960,6 +962,15 @@ def model_step_card(st) -> rx.Component:
         width="100%")
 
 
+def model_source_logos() -> rx.Component:
+    # Where the local models come from; decoration only. Sized to sit inside the heading row.
+    return rx.hstack(
+        *[rx.image(src=f"/{f}", alt=name, height="28px", width="28px", border_radius="6px", object_fit="cover")
+          for name, f in (("Hugging Face", "logo_huggingface.png"), ("Ollama", "logo_ollama.jpg"),
+                          ("Kaggle", "logo_kaggle.png"))],
+        spacing="2", align="center")
+
+
 def models_page() -> rx.Component:
     return page(
         "Model Configuration",
@@ -972,6 +983,7 @@ def models_page() -> rx.Component:
         rx.foreach(AppState.model_steps, model_step_card),
         rx.text("Sign-off (6) has no model: people do it. The chat and the report-back use the default text model.",
                 size="1", color="gray"),
+        beside_title=model_source_logos(), show_prd_note=False,
     )
 
 
