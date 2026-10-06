@@ -35,13 +35,39 @@ def test_health(client):
     assert client.get("/health").get_json()["ok"] is True
 
 
-def test_level_only_goes_up(client):
+def test_facilitator_moves_a_level_both_ways(client):
     job = _job(client)
     fid = _upload(client, job, level=2)
-    r = client.patch(f"/files/{fid}/level", json={"level": 1, "actor_role": "community"})
-    assert r.status_code == 400 and "only go up" in r.get_json()["error"]
-    r = client.patch(f"/files/{fid}/level", json={"level": 3, "actor_role": "community"})
+    client.post(f"/files/{fid}/confirm", json={"actor_role": "community"})
+    r = client.patch(f"/files/{fid}/level", json={"level": 1, "actor_role": "facilitator"})
+    assert r.status_code == 200 and r.get_json()["level"] == 1
+    r = client.patch(f"/files/{fid}/level", json={"level": 3, "actor_role": "facilitator"})
     assert r.status_code == 200 and r.get_json()["level"] == 3
+    r = client.patch(f"/files/{fid}/level", json={"level": 2, "actor_role": "facilitator"})
+    assert r.status_code == 200 and r.get_json()["level"] == 2
+    assert r.get_json()["confirmed"] is False  # any change needs the community to confirm again
+
+
+def test_analyst_can_raise_a_level_but_not_lower_it(client):
+    job = _job(client)
+    fid = _upload(client, job, level=2)
+    r = client.patch(f"/files/{fid}/level", json={"level": 1, "actor_role": "analyst"})
+    assert r.status_code == 403 and "only raise" in r.get_json()["error"]
+    r = client.patch(f"/files/{fid}/level", json={"level": 3, "actor_role": "analyst"})
+    assert r.status_code == 200 and r.get_json()["level"] == 3
+    r = client.patch(f"/files/{fid}/level", json={"level": 2, "actor_role": "analyst"})
+    assert r.status_code == 403
+    assert client.get(f"/jobs/{job}").get_json()["files"][0]["level"] == 3
+
+
+def test_community_and_client_cannot_change_a_level(client):
+    job = _job(client)
+    fid = _upload(client, job, level=2)
+    for role in ("community", "client"):
+        for level in (1, 3):
+            r = client.patch(f"/files/{fid}/level", json={"level": level, "actor_role": role})
+            assert r.status_code == 403, (role, level)
+    assert [f["level"] for f in client.get(f"/jobs/{job}").get_json()["files"]] == [2]
 
 
 def test_preview_shows_the_file_before_confirming(client):

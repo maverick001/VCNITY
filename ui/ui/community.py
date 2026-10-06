@@ -169,29 +169,6 @@ def preview(f) -> rx.Component:
         rx.fragment())
 
 
-def make_restricted(f, trigger: rx.Component) -> rx.Component:
-    return rx.alert_dialog.root(
-        rx.alert_dialog.trigger(trigger),
-        rx.alert_dialog.content(
-            rx.alert_dialog.title("Make this Restricted?"),
-            rx.alert_dialog.description(
-                "Only people will handle it from now on. The computer never touches it and it never reaches the "
-                "client. Anything the computer already made from it is taken out. This can't be undone."),
-            rx.hstack(rx.alert_dialog.cancel(rx.button("Not now", variant="soft", color_scheme="gray",
-                                                       radius="full")),
-                      rx.alert_dialog.action(rx.button("Yes, make it Restricted", color_scheme="tomato",
-                                                       radius="full", on_click=AppState.set_file_level(f["id"], "3"))),
-                      spacing="3", justify="end", margin_top="16px")))
-
-
-def raise_button(f, label: str, size: str = "3") -> rx.Component:
-    """Up one level. Up to Restricted asks first, because it can't be undone."""
-    btn = rx.button(rx.icon("lock", size=16), label, size=size, radius="full", variant="soft", color_scheme="tomato")
-    return rx.cond(f["raise_to"].to(int) == 3, make_restricted(f, btn),
-                   rx.button(rx.icon("arrow-up", size=16), label, size=size, radius="full", variant="soft",
-                             color_scheme="amber", on_click=AppState.set_file_level(f["id"], f["raise_to"])))
-
-
 def label_card(f) -> rx.Component:
     return rx.vstack(
         rx.hstack(
@@ -207,8 +184,9 @@ def label_card(f) -> rx.Component:
         rx.hstack(
             rx.button(rx.icon("check", size=18), "Yes, that's right", size="3", radius="full", color_scheme="grass",
                       on_click=AppState.confirm_file(f["id"])),
-            raise_button(f, "No — people only, please"),
             spacing="3", wrap="wrap"),
+        rx.text("Not right? Ask the facilitator or the analyst to change the label, then check it again here.",
+                size="2", color="gray"),
         spacing="3", align="start", **CARD)
 
 
@@ -218,10 +196,6 @@ def file_line(f) -> rx.Component:
         rx.text(f["name"], size="3", word_break="break-word"),
         rx.spacer(),
         level_pill(f["level"], f["level_name"]),
-        rx.cond(f["can_raise"],
-                raise_button(f, rx.cond(f["raise_to"].to(int) == 3, "Make it Restricted", "Make it Sensitive"),
-                             size="1"),
-                rx.fragment()),
         align="center", spacing="3", width="100%", wrap="wrap", padding_y="8px",
         border_bottom="1px solid var(--sand-4)")
 
@@ -238,7 +212,7 @@ def labels_section() -> rx.Component:
         rx.box(rx.accordion.root(rx.accordion.item(
             header=rx.text("See every file and its label", size="3", weight="medium"),
             content=rx.vstack(
-                rx.text("You can move any file up to a more careful label at any time. Labels never go down.",
+                rx.text("Only the facilitator or the analyst can change a label. If one looks wrong, tell them.",
                         size="2", color="gray"),
                 rx.foreach(AppState.c_files, file_line), spacing="1", width="100%")),
             collapsible=True, variant="ghost", width="100%"), **CARD),

@@ -94,11 +94,14 @@ def run_stage(session, job_id: int, n: int, **opts) -> dict:
     return result
 
 
-def raise_level(session, file_id: int, new_level: int) -> SourceFile:
-    """The community can raise a level any time. Raising to 3 pulls the file's
-    material out of everything AI has already produced."""
-    sf = s0_intake.set_level(session, file_id, new_level, actor_role="community")
-    if new_level >= 3:
+def change_level(session, file_id: int, new_level: int, actor_role: str = "facilitator") -> SourceFile:
+    """The facilitator can move a level up or down any time, the analyst only up. Raising to 3 pulls the
+    file's material out of everything AI has already produced. Lowering from 3 doesn't
+    bring it back: run the stages again to rebuild it, once the community confirms."""
+    before = session.get(SourceFile, file_id)
+    was = before.level if before is not None else None
+    sf = s0_intake.set_level(session, file_id, new_level, actor_role=actor_role)
+    if new_level >= 3 and was != 3:
         units = session.query(Unit).filter_by(file_id=file_id).all()
         touched: set[int] = set()
         for u in units:

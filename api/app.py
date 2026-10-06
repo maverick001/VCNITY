@@ -40,7 +40,7 @@ STAFF, EVERYONE = (F, A), (F, C, A, CL)
 PERMISSIONS: dict[str, tuple[str, ...]] = {
     "me": EVERYONE, "list_jobs": EVERYONE, "get_job": EVERYONE, "reports": EVERYONE,
     "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
-    "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, C),
+    "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, A),
     "preview": (F, C, A), "media": (F, C, A), "get_wordlist": (F, C, A), "put_wordlist": (F, C, A),
     "status": STAFF, "segments": STAFF,
     # Running the pipeline is analyst work; the facilitator uploads, sets levels and enters attendance (PRD §3).
@@ -267,7 +267,7 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
     def set_level(file_id):
         data = request.get_json(force=True)
         with db.session() as s:
-            sf = pipeline.raise_level(s, file_id, int(data["level"]))
+            sf = pipeline.change_level(s, file_id, int(data["level"]), actor_role=_role(data))
             return jsonify(_file(sf))
 
     @app.post("/files/<int:file_id>/confirm")

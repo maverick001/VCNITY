@@ -245,10 +245,12 @@ def stage_header(*ns: int) -> rx.Component:
                                    spacing="2", align="center"),
                          *lines, spacing="1", align="start", width="100%")
 
-    return rx.grid(
-        rx.card(column("bot", "AI does", 0), variant="surface"),
-        rx.card(column("user-round", "A person does", 1), variant="surface"),
-        columns=rx.breakpoints(initial="1", sm="2"), spacing="3", width="100%")
+    return rx.cond(
+        AppState.role == "facilitator", rx.fragment(),  # the facilitator's pages don't carry this row
+        rx.grid(
+            rx.card(column("bot", "AI does", 0), variant="surface"),
+            rx.card(column("user-round", "A person does", 1), variant="surface"),
+            columns=rx.breakpoints(initial="1", sm="2"), spacing="3", width="100%"))
 
 
 def user_chip() -> rx.Component:
@@ -299,7 +301,9 @@ def page(title: str, *children, beside_title: rx.Component | None = None,
          show_prd_note: bool = True) -> rx.Component:
     return rx.hstack(
         stage_nav(),
-        rx.vstack(top_bar(title, beside_title=beside_title), audit_panel(show_prd_note), message_bar(), *children,
+        rx.vstack(top_bar(title, beside_title=beside_title),
+                  rx.cond(AppState.role == "facilitator", rx.fragment(), audit_panel(show_prd_note)),
+                  message_bar(), *children,
                   spacing="4", width="100%", padding="32px", max_width="1200px"),
         align="start", width="100%", spacing="0", min_height="100vh", background_color=PAGE_BG)
 
@@ -312,8 +316,10 @@ def file_row(f) -> rx.Component:
         rx.table.cell(f["kind"]),
         rx.table.cell(
             rx.hstack(level_badge(f["level"]),
-                      rx.select(["1", "2", "3"], value=f["level_text"].to(str),
-                                on_change=lambda v: AppState.set_file_level(f["id"], v), size="1"),
+                      rx.cond((AppState.role == "facilitator") | (AppState.role == "analyst"),
+                              rx.select(f["level_options"].to(list[str]), value=f["level_text"].to(str),
+                                        on_change=lambda v: AppState.set_file_level(f["id"], v), size="1"),
+                              rx.fragment()),
                       align="center")),
         rx.table.cell(
             rx.cond(f["level"].to(int) == 1, rx.text("—", color="gray"),
@@ -427,8 +433,9 @@ def levels_card() -> rx.Component:
 
     return rx.card(
         rx.heading("Sensitivity levels", size="3"),
-        rx.text("Set on upload. The community can raise a level any time; nothing lowers it. Not sure? Go up a "
-                "level. Nothing above Level 1 goes near AI until a community reviewer confirms it.",
+        rx.text("Set on upload. The facilitator can change a level up or down, the analyst can only raise one, and the "
+                "community must confirm it again after any change. Not sure? Go up a level. Nothing above Level 1 goes near AI until a "
+                "community reviewer confirms it.",
                 size="1", color="gray"),
         rx.table.root(
             rx.table.header(rx.table.row(rx.table.column_header_cell("Level", width="190px"),
@@ -456,6 +463,30 @@ def wordlist_card() -> rx.Component:
         width="100%")
 
 
+def intake_files() -> rx.Component:
+    return rx.cond(AppState.job_id == 0,
+                   rx.button("Create a job", on_click=AppState.create_job),
+                   rx.table.root(
+                       rx.table.header(rx.table.row(
+                           rx.table.column_header_cell("File"), rx.table.column_header_cell("Kind"),
+                           rx.table.column_header_cell("Sensitivity"), rx.table.column_header_cell("Community check"),
+                           rx.table.column_header_cell("Consent"))),
+                       rx.table.body(rx.foreach(AppState.files, file_row)),
+                       width="100%"))
+
+
+def intake_tools() -> list[rx.Component]:
+    """Upload, the levels note, and who came / agreed themes: everything on the page except the files list."""
+    return [
+        rx.cond((AppState.role == "facilitator") & (AppState.job_id != 0), upload_card(), rx.fragment()),
+        levels_card(),
+        rx.cond(AppState.job_id != 0,
+                rx.grid(attendance_card(), agreed_card(), columns=rx.breakpoints(initial="1", md="2"), spacing="4",
+                        width="100%"),
+                rx.fragment()),
+    ]
+
+
 def intake_page() -> rx.Component:
     return page(
         "1 · Data Ingest",
@@ -464,21 +495,10 @@ def intake_page() -> rx.Component:
                 rx.callout(rx.text("Waiting for a community reviewer to confirm: ", AppState.waiting_level2_text),
                            icon="clock", color_scheme="amber", width="100%"),
                 rx.fragment()),
-        rx.cond(AppState.job_id == 0,
-                rx.button("Create a job", on_click=AppState.create_job),
-                rx.table.root(
-                    rx.table.header(rx.table.row(
-                        rx.table.column_header_cell("File"), rx.table.column_header_cell("Kind"),
-                        rx.table.column_header_cell("Sensitivity"), rx.table.column_header_cell("Community check"),
-                        rx.table.column_header_cell("Consent"))),
-                    rx.table.body(rx.foreach(AppState.files, file_row)),
-                    width="100%")),
-        rx.cond((AppState.role == "facilitator") & (AppState.job_id != 0), upload_card(), rx.fragment()),
-        levels_card(),
-        rx.cond(AppState.job_id != 0,
-                rx.grid(attendance_card(), agreed_card(), columns=rx.breakpoints(initial="1", md="2"), spacing="4",
-                        width="100%"),
-                rx.fragment()),
+        # The facilitator works top to bottom: upload first, the files list after. Everyone else sees files first.
+        rx.cond(AppState.role == "facilitator",
+                rx.vstack(*intake_tools(), intake_files(), spacing="4", width="100%"),
+                rx.vstack(intake_files(), *intake_tools(), spacing="4", width="100%")),
         rx.card(
             rx.heading("Brief", size="3"),
             rx.text(rx.cond(AppState.job_brief != "", AppState.job_brief,

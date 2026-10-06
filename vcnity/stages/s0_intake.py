@@ -1,9 +1,11 @@
 """Stage 1 — Data Ingest, the people half (PRD §4 stage 0, Intake). Ties every file to a consent record and a sensitivity level.
 Nothing gets in without both.
 
-Levels only go up. The facilitator sets one on upload; the community can raise
-it any time; nothing lowers it. Nothing above Level 1 goes near AI until a
-community reviewer confirms the level (PRD A9).
+The facilitator sets a level on upload and can change it later, up or down. The
+analyst can raise a level but never lower one. Nobody else can change it. Any
+change needs the community to confirm the level again.
+Nothing above Level 1 goes near AI until a community reviewer confirms the
+level (PRD A9).
 
 Also here: how many people came to each session (the report's "of M", PRD A6),
 and the set of themes agreed with the community before anything is sorted
@@ -77,11 +79,14 @@ def set_level(session, file_id: int, level: int, *, actor_role: str) -> SourceFi
         raise KeyError(file_id)
     if level not in (1, 2, 3):
         raise ValueError("level must be 1, 2 or 3")
-    if level < sf.level:
-        raise ValueError(f"levels only go up (is {sf.level}, asked for {level}); nothing lowers it")
+    if actor_role == "analyst":
+        if level < sf.level:
+            raise PermissionError(f"an analyst can only raise a level (is {sf.level}, asked for {level})")
+    elif actor_role != "facilitator":
+        raise PermissionError("only the facilitator or the analyst can change a level")
     if level != sf.level:
         sf.level = level
-        # A raised level needs confirming again before AI may run.
+        # A changed level needs confirming again before AI may run.
         sf.level_confirmed_by_community = False
     session.flush()
     return sf

@@ -352,8 +352,7 @@ class AppState(rx.State):
                         "level": level, "level_name": name,
                         "level_meaning": meaning,
                         "preview": preview, "has_preview": bool(preview), "media_url": api.media_url(int(f["id"]), self.token),
-                        "waiting": level == 2 and not f["confirmed"],
-                        "raise_to": level + 1, "can_raise": level < 3})
+                        "waiting": level == 2 and not f["confirmed"]})
         return out
 
     @rx.var
@@ -573,8 +572,11 @@ class AppState(rx.State):
         self.audit = self._api(api.get, f"/jobs/{self.job_id}/audit") or self.audit
         wl = self._api(api.get, "/wordlist") or {}
         self.wordlist_text = wl.get("text", "")
+        # The facilitator can set any level; the analyst can only go up from where the file is now.
         self.files = [{**f, "level_text": str(f["level"]), "consent_text": f"consent #{f['consent_id']}",
-                       "id_text": str(f["id"])} for f in self.files]
+                       "id_text": str(f["id"]),
+                       "level_options": [str(n) for n in (1, 2, 3) if self.role == "facilitator" or n >= f["level"]]}
+                      for f in self.files]
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
         self.artefacts = [{**a, "image_url": api.image_url(int(a["id"]), self.token),
                            "illegible_text": f"{a['illegible_count']} illegible",
@@ -754,13 +756,10 @@ class AppState(rx.State):
     def set_file_level(self, file_id: int, level: str):
         out = self._api(api.patch, f"/files/{int(file_id)}/level", {"level": int(level), "actor_role": self.role})
         if out is not None:
-            if self.role == "community":
-                self._say(f"Moved up to {LEVEL_WORDS[int(level)][0]}. " +
-                          ("Only people will handle it from now on." if int(level) == 3 else
-                           "Please check the label once more below."), "ok")
-            else:
-                self._say(f"Level set to {level}. " + ("Material withdrawn from AI outputs." if int(level) == 3 else
-                                                      "A community reviewer must confirm before AI runs."), "ok")
+            self._say(f"Level set to {level}. " + {
+                3: "Material withdrawn from AI outputs.",
+                2: "A community reviewer must confirm before AI runs.",
+                1: "If this came from Level 3, run the stages again to bring its material back."}[int(level)], "ok")
             self.refresh()
 
     def confirm_file(self, file_id: int):

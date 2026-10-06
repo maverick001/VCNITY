@@ -72,7 +72,7 @@ def test_agreed_theme_is_community_only_and_survives_level3(db_session, tmp_path
              speaker_key=f"file:{sf.id}", level=2)
     db_session.add(u); db_session.flush()
     db_session.add(ThemeQuote(theme_id=t.id, unit_id=u.id)); db_session.flush()
-    pipeline.raise_level(db_session, sf.id, 3)
+    pipeline.change_level(db_session, sf.id, 3)
     db_session.refresh(t)
     assert t.status == "confirmed" and t.agreed_upfront     # the community's theme stays, minus that quote
 
@@ -87,12 +87,24 @@ def test_raise_to_level3_cascades(db_session, tmp_path, monkeypatch):
     db_session.add(t); db_session.flush()
     db_session.add(ThemeQuote(theme_id=t.id, unit_id=u.id)); db_session.flush()
 
-    pipeline.raise_level(db_session, sf.id, 3)
+    pipeline.change_level(db_session, sf.id, 3)
     db_session.refresh(u); db_session.refresh(t); db_session.refresh(sf)
     assert sf.level == 3 and sf.level_confirmed_by_community is False
     assert u.excluded is True
     assert t.status == "unsupported"
     assert db_session.query(ThemeQuote).filter_by(theme_id=t.id).count() == 0
+
+
+def test_lowering_from_level3_needs_the_community_again(db_session, tmp_path):
+    from vcnity.stages._gate import ai_allowed
+
+    job, sf = _job(db_session, tmp_path, level=3, confirmed=True)
+    assert not ai_allowed(sf)
+    pipeline.change_level(db_session, sf.id, 2)
+    assert sf.level == 2 and sf.level_confirmed_by_community is False
+    assert not ai_allowed(sf)  # Level 2 stays shut until a community reviewer confirms the new level
+    s0_intake.confirm_level(db_session, sf.id)
+    assert ai_allowed(sf)
 
 
 def test_status_reports_every_stage(db_session, tmp_path):

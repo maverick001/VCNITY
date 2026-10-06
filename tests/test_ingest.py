@@ -105,9 +105,16 @@ def test_intake_levels(db_session, tmp_path):
     f.write_text("hi")
     sf = s0_intake.add_file(db_session, job.id, f, level=2, consent_label="c1", consent_scope="session")
     assert sf.kind == "text" and sf.level == 2 and sf.consent_id is not None
-    with pytest.raises(ValueError):
-        s0_intake.set_level(db_session, sf.id, 1, actor_role="analyst")
-    s0_intake.set_level(db_session, sf.id, 3, actor_role="community")
+    for role in ("analyst", "community", "client"):  # nobody but the facilitator lowers a level
+        with pytest.raises(PermissionError):
+            s0_intake.set_level(db_session, sf.id, 1, actor_role=role)
+    for role in ("community", "client"):  # and the community and client don't raise one either
+        with pytest.raises(PermissionError):
+            s0_intake.set_level(db_session, sf.id, 3, actor_role=role)
+    s0_intake.set_level(db_session, sf.id, 1, actor_role="facilitator")
+    assert db_session.get(SourceFile, sf.id).level == 1
+    s0_intake.set_level(db_session, sf.id, 2, actor_role="analyst")
+    s0_intake.set_level(db_session, sf.id, 3, actor_role="facilitator")
     assert db_session.get(SourceFile, sf.id).level == 3
     s0_intake.confirm_level(db_session, sf.id)
     assert db_session.get(SourceFile, sf.id).level_confirmed_by_community is True
