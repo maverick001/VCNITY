@@ -37,8 +37,9 @@ RUNS: dict[int, dict] = {}  # job_id → {stage, started, finished, error, resul
 # The community and the client are also held to their own job (see _job_of). PRD §3, A19–A21.
 F, C, A, CL = "facilitator", "community", "analyst", "client"
 STAFF, EVERYONE = (F, A), (F, C, A, CL)
+FACILITATOR_STAGES = (1, 2)  # Data Ingest, Audio Processing
 PERMISSIONS: dict[str, tuple[str, ...]] = {
-    "me": EVERYONE, "list_jobs": EVERYONE, "get_job": EVERYONE, "reports": EVERYONE,
+    "me": EVERYONE, "list_jobs": EVERYONE, "get_job": EVERYONE, "reports": (C, A, CL),
     "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
     "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, A),
     "preview": (F, C, A), "media": (F, C, A), "get_wordlist": (F, C, A), "put_wordlist": (F, C, A),
@@ -47,8 +48,11 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
     "run_stage": (A,), "reset_job": (A,), "compare": (A,), "compare_with_reference": (A,),
     "unsupported": (A,), "names": (A,), "flags": (A,),
     "ask_question": STAFF, "list_concerns": STAFF, "raise_concern": STAFF, "sort_concern": STAFF,
-    "artefacts": (F, C, A), "artefact_image": (F, C, A), "maker_statement": (F, C, A),
-    "themes": (F, C, A), "units": (F, C, A), "job_audit": (F, C, A),
+    # The facilitator works stages 1 and 2 (intake, word list and transcripts) and passes things between the
+    # analyst and the community; stages 3-8 are not theirs to see, so these refuse them. "themes" and "status"
+    # stay open to them but are trimmed in their handlers to what stages 1 and 2 need.
+    "artefacts": (C, A), "artefact_image": (C, A), "maker_statement": (C, A),
+    "themes": (F, C, A), "units": (C, A), "job_audit": (C, A),
     "review": (C, A), "approve": (C, A), "export": (A, CL),
     "people_count": (A,), "add_name": (A,), "remove_name": (A,), "names_checked": (A,), "decide": (A,),
     "edit_report": (A,), "send": (A,),
@@ -353,6 +357,9 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
             st = pipeline.status(s, job_id)
         with _lock:
             st["run"] = RUNS.get(job_id)
+        if g.user and g.user["role"] == "facilitator":  # stages 1 and 2 only, and none of the later stages' counts
+            keep = ("job_id", "name", "files", "segments", "waiting_level2", "attendance_total", "run")
+            st = {**{k: st[k] for k in keep}, "stages": [x for x in st["stages"] if x["n"] in FACILITATOR_STAGES]}
         return jsonify(st)
 
     # ---- stage views ----
@@ -413,6 +420,8 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
         with db.session() as s:
             rows = (s.query(Theme).filter(Theme.job_id == job_id, Theme.status != "unsupported")
                     .order_by(Theme.n_people.desc(), Theme.id).all())
+            if g.user and g.user["role"] == "facilitator":  # only the themes agreed up front, on the Data Ingest page
+                rows = [t for t in rows if t.agreed_upfront]
             return jsonify([_theme(t) for t in rows])
 
     @app.get("/jobs/<int:job_id>/themes/unsupported")

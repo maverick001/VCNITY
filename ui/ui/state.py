@@ -12,6 +12,10 @@ from .api_client import ApiError
 
 # The community and the client each get one page of their own and none of the stage pages.
 ROLE_HOME = {"community": "/community", "client": "/client"}
+# The facilitator is the analyst's interface to the community and the client, not a pipeline operator: they see
+# Data Ingest and Audio Processing (and the chat), and nothing of stages 3-8. The API refuses the rest too.
+FACILITATOR_STAGES = (1, 2)
+FACILITATOR_PAGES = ("/", "/transcript", "/chat")
 # Plain words for the community page: name, what's in it, what happens to it. PRD §4 levels table.
 LEVEL_WORDS = {
     1: ("Open", "General comments about places, services and surroundings. The computer can help sort it."),
@@ -23,7 +27,7 @@ LEVEL_WORDS = {
 # Stage 1 is Data Ingest: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
 STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
-# Left out of the sidebar and the Data Pipeline page. Report back isn't on the client's slides; it stays reachable at
+# Left out of the sidebar and the Workflow page. Report back isn't on the client's slides; it stays reachable at
 # /reportback until the client says what slide 11's "reporting function" means (PRD A14).
 HIDDEN_STAGES = {9}
 
@@ -324,7 +328,7 @@ class AppState(rx.State):
         out = []
         for s in self.stages:
             n = int(s["n"])
-            if n in HIDDEN_STAGES:
+            if n in HIDDEN_STAGES or (self.role == "facilitator" and n not in FACILITATOR_STAGES):
                 continue
             ai, person = STAGE_INFO.get(n, ("", ""))
             out.append({**s, "route": STAGE_ROUTES.get(n, "/"), "has_route": bool(STAGE_ROUTES.get(n)),
@@ -501,6 +505,8 @@ class AppState(rx.State):
             return rx.redirect("/")
         if path == "/models" and self.role != "analyst":  # model names are the analyst's business only
             return rx.redirect("/")
+        if self.role == "facilitator" and path not in FACILITATOR_PAGES:  # stages 3-8 and the overview aren't theirs
+            return rx.redirect("/")
         return None
 
     def load_login(self):
@@ -569,7 +575,9 @@ class AppState(rx.State):
         self.stages = st.get("stages", [])
         self.run = st.get("run") or {}
         self.running = bool(self.run) and self.run.get("finished") is None
-        self.audit = self._api(api.get, f"/jobs/{self.job_id}/audit") or self.audit
+        facilitator = self.role == "facilitator"
+        if not facilitator:
+            self.audit = self._api(api.get, f"/jobs/{self.job_id}/audit") or self.audit
         wl = self._api(api.get, "/wordlist") or {}
         self.wordlist_text = wl.get("text", "")
         # The facilitator can set any level; the analyst can only go up from where the file is now.
@@ -581,7 +589,7 @@ class AppState(rx.State):
         self.artefacts = [{**a, "image_url": api.image_url(int(a["id"]), self.token),
                            "illegible_text": f"{a['illegible_count']} illegible",
                            "maker_text": a["maker_statement"] or "—"}
-                          for a in (self._api(api.get, f"/jobs/{self.job_id}/artefacts") or [])]
+                          for a in ([] if facilitator else (self._api(api.get, f"/jobs/{self.job_id}/artefacts") or []))]
         self.themes = [self._shape_theme(t) for t in (self._api(api.get, f"/jobs/{self.job_id}/themes") or [])]
         self.unsupported = [{**u, "line": f"{u['label']} — {u['review_note']}"}
                             for u in ((self._api(api.get, f"/jobs/{self.job_id}/themes/unsupported") or [])
@@ -592,10 +600,11 @@ class AppState(rx.State):
                             "units_header": f"What sorting will see ({len(f['units'])})"}
                            for f in nm.get("files", []) if f["units"]]
         self.units = [{**u, "line": f"#{u['id']} [{u['speaker']}] {u['text']}"}
-                      for u in (self._api(api.get, f"/jobs/{self.job_id}/units") or [])]
+                      for u in ([] if facilitator else (self._api(api.get, f"/jobs/{self.job_id}/units") or []))]
         self.flags = [{**f, "decision_text": f"Decision: {f['decision']} — {f['reason']}" if f["decision"] else ""}
                       for f in ((self._api(api.get, f"/jobs/{self.job_id}/flags") or []) if analyst else [])]
-        self._load_reports()
+        if not facilitator:
+            self._load_reports()
         self.concerns = [{**c, "stage_text": f"stage {c['stage']}",
                           "routed_text": f"Routed to: {c['routed_to']} · treated as Level {c['level']}" if c["routed_to"] else ""}
                          for c in ((self._api(api.get, f"/jobs/{self.job_id}/concerns") or []) if staff else [])]

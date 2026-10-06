@@ -106,3 +106,36 @@ def test_only_the_analyst_runs_the_pipeline(client):
     assert client.get(f"/jobs/{ids[0]}/status", headers=fac).status_code == 200
     ana = _sign_in(client, "ana5")
     assert client.post(f"/jobs/{ids[0]}/reset", headers=ana).status_code == 200
+
+
+def test_facilitator_sees_only_stages_1_and_2(client):
+    from vcnity import db
+    from vcnity.models import Theme
+
+    ids = _users([("fac6", "facilitator", None), ("ana6", "analyst", None)])
+    job = ids[0]
+    with db.session() as s:
+        s.add_all([Theme(job_id=job, label="agreed", summary="s", status="confirmed", agreed_upfront=True, level=1),
+                   Theme(job_id=job, label="drafted", summary="s", status="draft", level=1)])
+    fac, ana = _sign_in(client, "fac6"), _sign_in(client, "ana6")
+
+    # Stages 3-8: refused for the facilitator, still there for the analyst.
+    for path in (f"/jobs/{job}/artefacts", f"/jobs/{job}/units", f"/jobs/{job}/audit", f"/jobs/{job}/reports"):
+        assert client.get(path, headers=fac).status_code == 403, path
+        assert client.get(path, headers=ana).status_code == 200, path
+    assert client.post(f"/jobs/{job}/run/3", headers=fac).status_code == 403
+
+    # Stages 1 and 2: still theirs.
+    assert client.get(f"/jobs/{job}", headers=fac).status_code == 200
+    assert client.get(f"/jobs/{job}/segments", headers=fac).status_code == 200
+    assert client.get("/wordlist", headers=fac).status_code == 200
+
+    # Status shows only those two stages, and none of the later stages' counts.
+    st = client.get(f"/jobs/{job}/status", headers=fac).get_json()
+    assert [x["n"] for x in st["stages"]] == [1, 2]
+    assert not {"themes", "units", "open_flags", "uncounted", "waiting_names", "status"} & set(st)
+    assert [x["n"] for x in client.get(f"/jobs/{job}/status", headers=ana).get_json()["stages"]] == list(range(1, 10))
+
+    # Themes: only the ones agreed up front, which the Data Ingest page lists.
+    assert [t["label"] for t in client.get(f"/jobs/{job}/themes", headers=fac).get_json()] == ["agreed"]
+    assert {t["label"] for t in client.get(f"/jobs/{job}/themes", headers=ana).get_json()} == {"agreed", "drafted"}

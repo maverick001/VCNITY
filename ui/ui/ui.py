@@ -212,9 +212,10 @@ def stage_nav() -> rx.Component:
                       spacing="1", align="start"),
             spacing="3", align="center", padding_bottom="8px"),
         rx.divider(),
-        rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Data Pipeline", size="4", line_height="1"), spacing="2",
-                          align="center"),
-                href="/pipeline", underline="none", **_nav_style(overview_active)),
+        rx.cond(AppState.role == "facilitator", rx.fragment(),  # the overview runs every stage: analyst work
+                rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Workflow", size="4", line_height="1"),
+                                  spacing="2", align="center"),
+                        href="/pipeline", underline="none", **_nav_style(overview_active))),
         rx.foreach(AppState.stage_names, item),
         # Model names are the analyst's business; the facilitator never sees this link or the page.
         rx.cond(AppState.role == "analyst",
@@ -305,7 +306,8 @@ def page(title: str, *children, beside_title: rx.Component | None = None,
                   rx.cond(AppState.role == "facilitator", rx.fragment(), audit_panel(show_prd_note)),
                   message_bar(), *children,
                   spacing="4", width="100%", padding="32px", max_width="1200px"),
-        align="start", width="100%", spacing="0", min_height="100vh", background_color=PAGE_BG)
+        align="start", width="100%", spacing="0", min_height="100vh",
+        background_color="var(--color-panel-solid)")  # same white as the sidebar
 
 
 # ---------------------------------------------------------------- 0 intake
@@ -567,7 +569,7 @@ def reset_card() -> rx.Component:
 
 def pipeline_page() -> rx.Component:
     return page(
-        "Pipeline overview",
+        "Workflow overview",
         rx.text("The stages of PRD §4, in order. Every stage can be re-run. AI stages refuse to run while a "
                 "Level 2 file is unconfirmed; stage 4 waits for the name check; stages 7 and 8 wait for "
                 "attendance and people counts; stage 8 waits for every identifiability flag.", color="gray"),
