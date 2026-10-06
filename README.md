@@ -24,8 +24,8 @@ ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 ## Install and run
 
 ```
-git clone https://github.com/maverick001/vcnity-app.git
-cd vcnity-app
+git clone https://github.com/maverick001/VCNITY.git
+cd VCNITY
 cp .env.example .env    # add your Hugging Face Token to fetch the model file
 python start.py         # installs dependencies, starts the database, API, and UI
 ```
@@ -88,3 +88,7 @@ A job, step by step:
 **1. Chat with Data** (facilitator or analyst, the violet button top right on any page). Opens a chat in its own browser tab where you can ask about the current job's material — "where did people talk about parking?", "what did the second recording say about the carpark?". A local model answers only from the material below Level 3 and lists the passages it used; Level 2 names may show as made-up stand-ins. It won't say what anything means — that's the community's call at sign-off. Answers can take up to a minute, the chat is blocked while a stage is running, and nothing is kept after you reload the page.
 
 **2. Model Configuration** (analyst only, *Model Configuration* at the bottom of the sidebar). The Hugging Face, Ollama and Kaggle logos beside the heading are decoration; they show where local models come from. Pick which model each step uses for the current job: audio processing, image processing, draft themes, evidence check, security check and reporting. Each model shows its parameter count, where it came from and its size on disk, e.g. `faster-whisper-large-v3 (1.55B) · Systran · 3.1 GB`. Only models already on this laptop are listed — speech models in `~/.vcnity/cache/models`, text and vision models from Ollama. A model you `ollama pull` shows up the next time you open or reload the page, no code change; Ollama says whether it reads images, which decides the steps it's offered for. A new speech model gets downloaded the first time stage 2 runs with it set as `VCNITY_ASR_MODEL` in `.env`. A pick applies to that job only; anything a step has already made stays until you re-run it. Without a pick, a step uses the defaults in `.env`. Nobody else sees the page or which models are in use.
+
+## License
+
+© 2026 Kevin Bai. All rights reserved. This code is published for viewing only: no permission is granted to copy, modify or redistribute it.
