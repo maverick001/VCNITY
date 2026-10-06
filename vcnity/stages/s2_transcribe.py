@@ -169,25 +169,37 @@ def term_hits(reference: str, hypothesis: str, terms: list[str]) -> dict:
             "error_rate": round(1 - found / total, 4) if total else None}
 
 
+def _key(word: str) -> str:
+    """A word as the comparison sees it: no capitals, no punctuation round it ("codes," is "codes")."""
+    return re.sub(r"[^\w']+", "", word.lower().replace("’", "'")).strip("'")
+
+
+def _words(text: str) -> list[str]:
+    """Words to compare. A lone dash or other bare punctuation isn't a word, so it is left out."""
+    return [w for w in text.split() if _key(w)]
+
+
 def compare(session, file_id: int, reference: str | None = None, terms: list[str] | None = None) -> dict:
     """What the word list changed — and, if a person pasted a reference, what it fixed."""
     without, with_ = _text(session, file_id, "without"), _text(session, file_id, "with_wordlist")
-    a, b = without.split(), with_.split()
+    a, b = _words(without), _words(with_)
+    ka, kb = [_key(w) for w in a], [_key(w) for w in b]
     diff = []
     changed = 0
-    for tag, i1, i2, j1, j2 in SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+    for tag, i1, i2, j1, j2 in SequenceMatcher(a=ka, b=kb, autojunk=False).get_opcodes():
         if tag == "equal":
-            diff.append({"kind": "same", "text": " ".join(a[i1:i2])})
+            diff.append({"kind": "same", "text": " ".join(b[j1:j2])})  # the run used downstream, as it was written
         else:
             diff.append({"kind": "changed", "without": " ".join(a[i1:i2]), "with": " ".join(b[j1:j2])})
             changed += max(i2 - i1, j2 - j1)
     out = {
         "file_id": file_id,
-        "wer_between_runs": round(wer(without, with_), 4),
+        "wer_between_runs": round(wer(" ".join(ka), " ".join(kb)), 4),
         "words_changed": changed,
         "words_total": max(len(a), 1),
         "diff": diff,
-        "note": "wer_between_runs is how much the word list changed the transcript, not accuracy.",
+        "note": "wer_between_runs is how much the word list changed the transcript, not accuracy. "
+                "Capitals and punctuation are ignored.",
     }
     if reference and reference.strip():
         out["wer_without_vs_reference"] = round(wer(reference, without), 4)

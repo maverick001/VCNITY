@@ -69,6 +69,20 @@ def test_compare_variants(db_session):
     assert out["words_changed"] >= 1
 
 
+def test_compare_ignores_capitals_and_punctuation(db_session):
+    job = Job(name="j"); db_session.add(job); db_session.flush()
+    f = SourceFile(job_id=job.id, filename="a.m4a", kind="audio", level=1, path="x", sha256="0" * 64)
+    db_session.add(f); db_session.flush()
+    db_session.add_all([
+        Segment(file_id=f.id, variant="without", start_s=0, end_s=1, text="so we have codes which feel vague"),
+        Segment(file_id=f.id, variant="with_wordlist", start_s=0, end_s=1, text="So, we have codes, which feel vague."),
+    ])
+    db_session.flush()
+    out = s2_transcribe.compare(db_session, f.id)
+    assert out["words_changed"] == 0 and out["wer_between_runs"] == 0.0
+    assert all(d["kind"] == "same" for d in out["diff"])
+
+
 def test_wer_against_reference():
     assert s2_transcribe.wer("the cat sat", "the cat sat") == 0.0
     assert 0 < s2_transcribe.wer("the cat sat", "the cat stood") < 1
