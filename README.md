@@ -24,8 +24,8 @@ ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 ## Install and run
 
 ```
-git clone https://github.com/maverick001/vcnity.git
-cd vcnity
+git clone https://github.com/maverick001/vcnity-app.git
+cd vcnity-app
 cp .env.example .env    # add your Hugging Face Token to fetch the model file
 python start.py         # installs dependencies, starts the database, API, and UI
 ```

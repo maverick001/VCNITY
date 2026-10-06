@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .venv/
 .web/
 __pycache__/
@@ -9,3 +11,21 @@ cache/
 ui/.web/
 ui/.states/
 ui/assets/external/
+
+# raw community material must never be committed, wherever VCNITY_DATA_DIR points
+data/raw/
+*.m4a
+*.wav
+*.mp3
+*.mp4
+*.aac
+*.flac
+*.xlsx
+*.docx
+*.pptx
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
