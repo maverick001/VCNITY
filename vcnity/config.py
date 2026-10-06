@@ -11,7 +11,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 APP_DIR = Path(__file__).resolve().parents[1]
-REPO_DIR = APP_DIR.parent
 load_dotenv(APP_DIR / ".env")
 
 
@@ -36,7 +35,7 @@ class Settings:
 def load_settings() -> Settings:
     home = Path(os.environ.get("VCNITY_HOME", Path.home() / ".vcnity"))
     return Settings(
-        data_dir=Path(os.environ.get("VCNITY_DATA_DIR", REPO_DIR / "Data" / "raw")),
+        data_dir=Path(os.environ.get("VCNITY_DATA_DIR", home / "raw")),
         home=home,
         cache_dir=home / "cache",
         pg_dir=home / "pgdata",
