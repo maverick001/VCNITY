@@ -51,26 +51,26 @@ uv run python scripts/users.py password sam               # reset a password
 
 `demo` makes these four accounts, with the role name as the username. A community or client account belongs to one job, so `demo` only makes them once a job exists: create one as the facilitator, then run `demo` again.
 
-| Username      | Role             | Who they are                                                                            |
-| ------------- | ---------------- | --------------------------------------------------------------------------------------- |
-| `facilitator` | Facilitator      | Meets community members, collects the raw data, uploads it and labels it                |
-| `analyst`     | Data Analyst     | Processes the raw data, runs the stages, picks the models and produces the report       |
-| `community`   | Community Member | Reviews the labels and themes, says what things mean, signs off and approves the report |
-| `client`      | Client           | Reads the report once the community and the analyst have approved it                    |
+| Username          | Role             | Who they are                                                                            |
+| ----------------- | ---------------- | --------------------------------------------------------------------------------------- |
+| `facilitator`     | Facilitator      | Meets community members, collects the raw data, uploads it and labels it                |
+| `analyst`         | Data Analyst     | Processes the raw data, runs the stages, picks the models and produces the report       |
+| `communitymember` | Community Member | Reviews the labels and themes, says what things mean, signs off and approves the report |
+| `councilmember`   | Client           | Reads the report once the community and the analyst have approved it                    |
 
 ## 
 
 ## Using the app
 
-The Main Panel
+The Analyst Panel
 
 ![The prototype's Data Ingestion page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
 
-After signing in, you land on your own panel page. Each step below says which role does it. The sidebar lists the stages in order (the analyst sees all of 1–8; the facilitator sees only 1 and 2, because their job is to bring material in and pass things between the analyst and the community and client); a green tick means that stage has output, and an amber person icon means it's waiting for someone (hover to see what for). You run a stage with **Run** on the **Workflow** page, or the re-run button on that stage's own page — only the analyst can. The facilitator never runs stages or resets a job, and never sees stages 3–8: the Workflow overview, the artefacts, themes and sign-off, the made-up names list, the identifiability flags, the evidence check or the report.
+After signing in, you land on your own panel page. The workflow lists the stages in order; a green tick means that stage has output, and an amber person icon means it's waiting for input. A **facilitator** can upload raw data files and input complemntary information on the Facicitator panel. An analyst can run a single stage with **Run** on the **Workflow** page, or use the **Reset job** button to rerun the whole workflow. 
 
-The **community** and the **client** don't see the sidebar or the stage pages. Signing in as either takes you to a page of their own. The community page (`/community`) is one plain-language page with everything a community reviewer does: check each file's label (with a preview of the file), agree themes and the word list, say what each made thing means, sign off the themes, and approve the report. It shows only the quotes behind each theme, plus a search when adding one we missed — never a full transcript. The client page (`/client`) shows the report once both approvals are in, and nothing else.
+The **community** and the **client (council member)** don't see the sidebar or the stage pages. Signing in as either takes you to a page of their own. The community page (`/community`) is one plain-language page with everything a community reviewer does: check each file's label (with a preview of the file), agree themes and the word list,  sign off the themes, and approve the report. It shows only the quotes behind each theme, plus a search when adding one we missed — never a full transcript. The client page (`/client`) shows the report once both approvals are in, and nothing else.
 
-A job, step by step:
+Run workflow step by step:
 
 1. **Data Ingestion** (facilitator and community, *1 · Data Ingestion*).
    - **Upload** (facilitator). Create a job and upload recordings, photos, Word/PowerPoint/text files and the client's spreadsheet. Give each file a consent label and a sensitivity level; if unsure, go up a level. The facilitator can change a level later, up or down; the analyst can only raise one. After any change, a Level 2 file needs the community to confirm it again.
@@ -90,8 +90,6 @@ A job, step by step:
 **1. Chat with Data** (facilitator or analyst, the violet button top right on any page). Opens a chat in its own browser tab where you can ask about the current job's material — "where did people talk about parking?", "what did the second recording say about the carpark?". A local model answers only from the material below Level 3 and lists the passages it used; Level 2 names may show as made-up stand-ins. It won't say what anything means — that's the community's call at sign-off. Answers can take up to a minute, the chat is blocked while a stage is running, and nothing is kept after you reload the page.
 
 **2. Model Configuration** (analyst only, *Model Configuration* at the bottom of the sidebar). The Hugging Face, Ollama and Kaggle logos beside the heading are decoration; they show where local models come from. Pick which model each step uses for the current job: audio processing, image processing, draft themes, evidence check, security check and reporting. Each model shows its parameter count, where it came from and its size on disk, e.g. `faster-whisper-large-v3 (1.55B) · Systran · 3.1 GB`. Only models already on this laptop are listed — speech models in `~/.vcnity/cache/models`, text and vision models from Ollama. A model you `ollama pull` shows up the next time you open or reload the page, no code change; Ollama says whether it reads images, which decides the steps it's offered for. A new speech model gets downloaded the first time stage 2 runs with it set as `VCNITY_ASR_MODEL` in `.env`. A pick applies to that job only; anything a step has already made stays until you re-run it. Without a pick, a step uses the defaults in `.env`. Nobody else sees the page or which models are in use.
-
-
 
 License
 
