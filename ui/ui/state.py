@@ -24,6 +24,8 @@ LEVEL_WORDS = {
     3: ("Restricted", "Cultural knowledge, or someone telling us about harm. People only — the computer never "
                       "touches it, and it never reaches the client."),
 }
+# One colour per speaker on the Audio Processing page; repeats after eight voices.
+SPEAKER_COLORS = ("blue", "orange", "grass", "purple", "tomato", "cyan", "pink", "brown")
 # Stage 1 is Data Ingestion: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
 STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
@@ -640,15 +642,34 @@ class AppState(rx.State):
                 "has_note": bool(t.get("review_note"))}
 
     @staticmethod
-    def _shape_segment(s: dict) -> dict:
-        return {**s, "start_text": f"{s['start']:.1f}", "speaker_text": s["speaker"] or "?"}
+    def _speaker_numbers(segments: list[dict]) -> dict[str, int]:
+        """Who spoke first in this recording is 1, the next new voice is 2, and so on. The model's own
+        SPEAKER_00, SPEAKER_01 ... follow its clustering, not who talks first, so this is display only."""
+        order: dict[str, int] = {}
+        for s in sorted(segments, key=lambda s: s["start"]):
+            if s["speaker"] and s["speaker"] not in order:
+                order[s["speaker"]] = len(order) + 1
+        return order
+
+    @staticmethod
+    def _shape_segment(s: dict, numbers: dict[str, int]) -> dict:
+        out = {**s, "start_text": f"{s['start']:.1f}"}
+        if not s["speaker"]:
+            return {**out, "speaker_text": "Unknown", "speaker_color": "gray", "text_color": "inherit"}
+        n = numbers.setdefault(s["speaker"], len(numbers) + 1)
+        color = SPEAKER_COLORS[(n - 1) % len(SPEAKER_COLORS)]
+        return {**out, "speaker_text": f"SPEAKER_{n:02d}", "speaker_color": color,
+                "text_color": f"var(--{color}-11)"}
 
     def _load_transcript(self):
         fid = self.selected_file_id
         allw = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="with_wordlist") or []
         allo = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="without") or []
-        self.segments_with = [self._shape_segment(s) for s in allw if s["file_id"] == fid]
-        self.segments_without = [self._shape_segment(s) for s in allo if s["file_id"] == fid]
+        mine_with = [s for s in allw if s["file_id"] == fid]
+        mine_without = [s for s in allo if s["file_id"] == fid]
+        numbers = self._speaker_numbers(mine_with)  # one numbering for both columns, so the labels agree
+        self.segments_with = [self._shape_segment(s, numbers) for s in mine_with]
+        self.segments_without = [self._shape_segment(s, numbers) for s in mine_without]
         cmp = (self._api(api.get, f"/jobs/{self.job_id}/compare/{fid}") or {}) if self.role == "analyst" else {}
         self.compare = {k: v for k, v in cmp.items() if k != "diff"}
         self.diff = cmp.get("diff", [])

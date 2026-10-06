@@ -590,8 +590,8 @@ def pipeline_page() -> rx.Component:
 def seg_row(s) -> rx.Component:
     return rx.hstack(
         rx.text(s["start_text"], size="1", color="gray", width="52px", min_width="52px"),
-        rx.badge(s["speaker_text"], size="1", color_scheme="gray"),
-        rx.text(s["text"], size="2",
+        rx.badge(s["speaker_text"], size="1", color_scheme=s["speaker_color"]),
+        rx.text(s["text"], size="2", color=s["text_color"],
                 background_color=rx.cond(s["unsure"], "var(--amber-3)", "transparent")),
         rx.cond(s["unsure"], rx.badge("not sure — needs a person", color_scheme="amber", size="1"), rx.fragment()),
         align="start", spacing="2", width="100%")
@@ -628,7 +628,7 @@ def transcript_page() -> rx.Component:
             rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
             width="100%"), rx.fragment()),
         rx.cond(AppState.speakers_missing,
-                rx.callout("Speakers not identified for this recording, so every line shows \"?\" instead of who "
+                rx.callout("Speakers not identified for this recording, so every line shows \"Unknown\" instead of who "
                            "spoke. The analyst can re-run stage 2 to try again.",
                            icon="triangle-alert", color_scheme="amber", width="100%"),
                 rx.fragment()),
