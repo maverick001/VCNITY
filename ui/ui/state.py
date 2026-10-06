@@ -324,6 +324,11 @@ class AppState(rx.State):
         return str(self.job.get("brief", ""))
 
     @rx.var
+    def current_path(self) -> str:
+        """The page being shown, e.g. "/transcript", so the sidebar can highlight its tab."""
+        return self.router.url.path.rstrip("/") or "/"
+
+    @rx.var
     def stage_names(self) -> list[dict[str, Any]]:
         out = []
         for s in self.stages:

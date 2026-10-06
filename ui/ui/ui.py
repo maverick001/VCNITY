@@ -195,14 +195,14 @@ def stage_nav() -> rx.Component:
             spacing="2", align="center", width="100%")
 
     def item(s):
-        active = AppState.router.page.path == s["route"]
+        active = AppState.current_path == s["route"]
         return rx.cond(
             s["has_route"],
             rx.link(row(s), href=s["route"], underline="none", **_nav_style(active)),
             rx.tooltip(rx.box(row(s), width="100%", padding="6px 10px", color="var(--gray-10)"),
                        content="Runs in the background — no screen, nothing for a person to do"))
 
-    overview_active = AppState.router.page.path == "/pipeline"
+    overview_active = AppState.current_path == "/pipeline"
     return rx.vstack(
         rx.hstack(
             rx.center(rx.icon("waypoints", size=18, color="white"), background_color="var(--accent-9)",
@@ -223,7 +223,7 @@ def stage_nav() -> rx.Component:
                           rx.link(rx.hstack(rx.icon("cpu", size=16), rx.text("Model Configuration", size="2"),
                                             spacing="2", align="center"),
                                   href="/models", underline="none",
-                                  **_nav_style(AppState.router.page.path == "/models")),
+                                  **_nav_style(AppState.current_path == "/models")),
                           spacing="1", width="100%"),
                 rx.fragment()),
         rx.spacer(),
