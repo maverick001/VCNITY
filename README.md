@@ -97,4 +97,4 @@ A job, step by step:
 
 ## License
 
-© 2026 Kevin Bai. All rights reserved, except the sign-in background photo, which is a third-party image used under the Unsplash License. This code is published for viewing only: no permission is granted to copy, modify or redistribute it.
+© 2026 Kevin Bai. All rights reserved.
