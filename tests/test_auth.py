@@ -136,6 +136,6 @@ def test_facilitator_sees_only_stages_1_and_2(client):
     assert not {"themes", "units", "open_flags", "uncounted", "waiting_names", "status"} & set(st)
     assert [x["n"] for x in client.get(f"/jobs/{job}/status", headers=ana).get_json()["stages"]] == list(range(1, 10))
 
-    # Themes: only the ones agreed up front, which the Data Ingest page lists.
+    # Themes: only the ones agreed up front, which the Data Ingestion page lists.
     assert [t["label"] for t in client.get(f"/jobs/{job}/themes", headers=fac).get_json()] == ["agreed"]
     assert {t["label"] for t in client.get(f"/jobs/{job}/themes", headers=ana).get_json()} == {"agreed", "drafted"}

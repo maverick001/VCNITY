@@ -13,7 +13,7 @@ from .api_client import ApiError
 # The community and the client each get one page of their own and none of the stage pages.
 ROLE_HOME = {"community": "/community", "client": "/client"}
 # The facilitator is the analyst's interface to the community and the client, not a pipeline operator: they see
-# Data Ingest and Audio Processing (and the chat), and nothing of stages 3-8. The API refuses the rest too.
+# Data Ingestion and Audio Processing (and the chat), and nothing of stages 3-8. The API refuses the rest too.
 FACILITATOR_STAGES = (1, 2)
 FACILITATOR_PAGES = ("/", "/transcript", "/chat")
 # Plain words for the community page: name, what's in it, what happens to it. PRD §4 levels table.
@@ -24,7 +24,7 @@ LEVEL_WORDS = {
     3: ("Restricted", "Cultural knowledge, or someone telling us about harm. People only — the computer never "
                       "touches it, and it never reaches the client."),
 }
-# Stage 1 is Data Ingest: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
+# Stage 1 is Data Ingestion: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
 STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
 # Left out of the sidebar and the Workflow page. Report back isn't on the client's slides; it stays reachable at

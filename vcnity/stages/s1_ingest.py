@@ -1,4 +1,4 @@
-"""The conversion half of stage 1, Data Ingest (Intake and Ingest merged).
+"""The conversion half of stage 1, Data Ingestion (Intake and Ingest merged).
 Converts formats and records where each file came from.
 
     audio  → 16 kHz mono WAV (PyAV; no system ffmpeg needed)

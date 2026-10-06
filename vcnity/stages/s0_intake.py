@@ -1,4 +1,4 @@
-"""Stage 1 — Data Ingest, the people half (PRD §4 stage 0, Intake). Ties every file to a consent record and a sensitivity level.
+"""Stage 1 — Data Ingestion, the people half (PRD §4 stage 0, Intake). Ties every file to a consent record and a sensitivity level.
 Nothing gets in without both.
 
 The facilitator sets a level on upload and can change it later, up or down. The

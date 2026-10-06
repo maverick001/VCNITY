@@ -491,7 +491,7 @@ def intake_tools() -> list[rx.Component]:
 
 def intake_page() -> rx.Component:
     return page(
-        "1 · Data Ingest",
+        "1 · Data Ingestion",
         stage_header(1),
         rx.cond(AppState.has_waiting_level2,
                 rx.callout(rx.text("Waiting for a community reviewer to confirm: ", AppState.waiting_level2_text),

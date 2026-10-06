@@ -37,7 +37,7 @@ RUNS: dict[int, dict] = {}  # job_id → {stage, started, finished, error, resul
 # The community and the client are also held to their own job (see _job_of). PRD §3, A19–A21.
 F, C, A, CL = "facilitator", "community", "analyst", "client"
 STAFF, EVERYONE = (F, A), (F, C, A, CL)
-FACILITATOR_STAGES = (1, 2)  # Data Ingest, Audio Processing
+FACILITATOR_STAGES = (1, 2)  # Data Ingestion, Audio Processing
 PERMISSIONS: dict[str, tuple[str, ...]] = {
     "me": EVERYONE, "list_jobs": EVERYONE, "get_job": EVERYONE, "reports": (C, A, CL),
     "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
@@ -420,7 +420,7 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
         with db.session() as s:
             rows = (s.query(Theme).filter(Theme.job_id == job_id, Theme.status != "unsupported")
                     .order_by(Theme.n_people.desc(), Theme.id).all())
-            if g.user and g.user["role"] == "facilitator":  # only the themes agreed up front, on the Data Ingest page
+            if g.user and g.user["role"] == "facilitator":  # only the themes agreed up front, on the Data Ingestion page
                 rows = [t for t in rows if t.agreed_upfront]
             return jsonify([_theme(t) for t in rows])
 

@@ -20,7 +20,7 @@ from .stages import (s0_intake, s1_ingest, s2_transcribe, s2b_diarise, s3_artefa
                      s5_evidence, s6_signoff, s7_identify, s8_report, s9_reportback)
 
 STAGE_NAMES = {
-    1: "Data Ingest", 2: "Audio Processing", 3: "Image Processing", 4: "Draft themes",
+    1: "Data Ingestion", 2: "Audio Processing", 3: "Image Processing", 4: "Draft themes",
     5: "Evidence check", 6: "Community sign-off", 7: "Security Check", 8: "Reporting", 9: "Report back",
 }
 AI_STAGES = {2, 3, 4, 5, 8, 9}
@@ -40,7 +40,7 @@ def _stage2(session, job_id, **opts):
 
 
 def _stage1(session, job_id, **opts):
-    """Data Ingest: check every file has consent and a level, then convert them.
+    """Data Ingestion: check every file has consent and a level, then convert them.
     PRD §4's stages 0 (Intake) and 1 (Ingest) in one — Ingest had nothing for a person to do."""
     out = s0_intake.run(session, job_id)
     out["ingested"] = s1_ingest.run(session, job_id)

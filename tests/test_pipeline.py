@@ -19,7 +19,7 @@ def _job(db_session, tmp_path, level=2, confirmed=False):
 
 def test_gate_refuses_ai_stages_on_unconfirmed_level2(db_session, tmp_path):
     job, sf = _job(db_session, tmp_path, level=2, confirmed=False)
-    pipeline.run_stage(db_session, job.id, 1)          # data ingest needs no AI: allowed
+    pipeline.run_stage(db_session, job.id, 1)          # data ingestion needs no AI: allowed
     for n in (2, 3, 4, 5, 8, 9):
         with pytest.raises(pipeline.GateError):
             pipeline.run_stage(db_session, job.id, n)

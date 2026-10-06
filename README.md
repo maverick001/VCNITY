@@ -64,7 +64,7 @@ uv run python scripts/users.py password sam               # reset a password
 
 The Main Panel
 
-![The prototype's Data Ingest page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
+![The prototype's Data Ingestion page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
 
 After signing in, you land on your own panel page. Each step below says which role does it. The sidebar lists the stages in order (the analyst sees all of 1–8; the facilitator sees only 1 and 2, because their job is to bring material in and pass things between the analyst and the community and client); a green tick means that stage has output, and an amber person icon means it's waiting for someone (hover to see what for). You run a stage with **Run** on the **Workflow** page, or the re-run button on that stage's own page — only the analyst can. The facilitator never runs stages or resets a job, and never sees stages 3–8: the Workflow overview, the artefacts, themes and sign-off, the made-up names list, the identifiability flags, the evidence check or the report.
 
@@ -72,7 +72,7 @@ The **community** and the **client** don't see the sidebar or the stage pages. S
 
 A job, step by step:
 
-1. **Data Ingest** (facilitator and community, *1 · Data Ingest*).
+1. **Data Ingestion** (facilitator and community, *1 · Data Ingestion*).
    - **Upload** (facilitator). Create a job and upload recordings, photos, Word/PowerPoint/text files and the client's spreadsheet. Give each file a consent label and a sensitivity level; if unsure, go up a level. The facilitator can change a level later, up or down; the analyst can only raise one. After any change, a Level 2 file needs the community to confirm it again.
    - **Who came** (facilitator). Enter how many people came to each session. The total is the "M" in the report's "N of M participants".
    - **Confirm levels and agree themes** (community, under *Check the labels* and *Our words*). Confirm every Level 2 file's level (no AI runs on it until then) and add the themes to sort into.
