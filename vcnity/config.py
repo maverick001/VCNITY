@@ -52,7 +52,7 @@ def load_settings() -> Settings:
         sort_similarity=float(os.environ.get("VCNITY_SORT_SIMILARITY", "0.45")),
         safety_contact=os.environ.get("VCNITY_SAFETY_CONTACT") or "UNSET — see PRD A18",
         api_port=int(os.environ.get("VCNITY_API_PORT", "8100")),
-        wordlist_path=Path(os.environ.get("VCNITY_WORDLIST", APP_DIR / "data" / "wordlist.txt")),
+        wordlist_path=Path(os.environ.get("VCNITY_WORDLIST", APP_DIR / "wordlist" / "wordlist.txt")),
     )
 
 
