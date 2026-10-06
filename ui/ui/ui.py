@@ -1025,7 +1025,6 @@ def login_page() -> rx.Component:
                           rx.text("AI-assisted co-design analysis", size="1", color="gray"), spacing="1"),
                 align="center", spacing="3"),
             rx.heading("Sign in", size="6", padding_top="8px"),
-            rx.text("You'll go straight to your own page.", size="2", color="gray"),
             rx.form(
                 rx.vstack(
                     rx.text("Username", size="2", weight="medium"),
