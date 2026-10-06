@@ -1,10 +1,8 @@
 # VCNITY Community App
 
-This is a prototype application of AI-assisted data pipeline that turns community creative Co-Design materials, such as multi-speaker audio in several languages and accents, local slang, photos of handmade artefacts into policy-ready themes, without letting AI distort or override the community's say. Everything runs on your local PC — nothing is sent to the cloud.
+This is a prototype application of GenAI-assisted data pipeline that automates community creative Co-Design without letting AI distort or override the community's say. All the data runs on your local PC — nothing is sent to the cloud.
 
-The Main Dashboard:
 
-![The prototype's Data Ingest page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
 
 ## Preparation for Installation
 
@@ -20,6 +18,8 @@ Pull these two open-source Qwen models from Ollama:
 ollama pull qwen3.5:4b    # text model: finds names, labels themes, evidence checks, reports
 ollama pull qwen3-vl:4b   # vision model for preprocessing image artefacts
 ```
+
+## 
 
 ## Install and run
 
@@ -38,7 +38,9 @@ On the sign-in page, every user can sign in with an account as facilitator, anal
 
 ![The sign-in page: username and password, then straight to your own page](images/auth.jpg)
 
-### Authentication
+### 
+
+## Authentication
 
 Everyone signs in. There's no sign-up page: make accounts from the command line, while the app is running or not.
 
@@ -57,6 +59,8 @@ uv run python scripts/users.py password sam               # reset a password
 | `analyst`     | Data Analyst     | Processes the raw data, runs the stages, picks the models and produces the report       |
 | `community`   | Community Member | Reviews the labels and themes, says what things mean, signs off and approves the report |
 | `client`      | Client           | Reads the report once the community and the analyst have approved it                    |
+
+## 
 
 ## Using the app
 
@@ -82,6 +86,8 @@ A job, step by step:
 6. **Sign off** (community, *What we heard*). Confirm, fix or reject each theme and add any we missed. Switch on *This comes from Restricted material* for a theme from material only people have seen; it reaches the client with no quotes.
 7. **Count and check** (analyst, *7 · Security Check*). Type the number of people behind each theme, run stage 7, then keep or cut every flag and write down why.
 8. **Report** (community and analyst, *8 · Reporting*). Run stage 8. The community (under *The report*) and the analyst both approve, then export it as a Word file.
+
+
 
 ## Features
 
