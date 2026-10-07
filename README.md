@@ -66,7 +66,7 @@ The Analyst Panel
 
 ![The prototype's Data Ingestion page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
 
-After signing in, you land on your own panel page. The workflow lists the stages in order; a green tick means that stage has output, and an amber person icon means it's waiting for input. A **facilitator** can upload raw data files and input complemntary information on the Facicitator panel. An analyst can run a single stage with **Run** on the **Workflow** page, or use the **Reset job** button to rerun the whole workflow. 
+After signing in, you land on your own panel page. The workflow lists the stages in order; a green tick means that stage has output, and an amber person icon means it's waiting for input. A **facilitator** can upload raw data files and input complemntary information on the Facicitator panel. An analyst can run a single stage with **Run** on the **Agent Workflow** page, or use the **Reset job** button to rerun the whole workflow. 
 
 The **community** and the **client (council member)** don't see the sidebar or the stage pages. Signing in as either takes you to a page of their own. The community page (`/community`) is one plain-language page with everything a community reviewer does: check each file's label (with a preview of the file), agree themes and the word list,  sign off the themes, and approve the report. It shows only the quotes behind each theme, plus a search when adding one we missed — never a full transcript. The client page (`/client`) shows the report once both approvals are in, and nothing else.
 
@@ -76,7 +76,7 @@ Run workflow step by step:
    - **Upload** (facilitator). Create a job and upload recordings, photos, Word/PowerPoint/text files and the client's spreadsheet. Give each file a consent label and a sensitivity level; if unsure, go up a level. The facilitator can change a level later, up or down; the analyst can only raise one. After any change, a Level 2 file needs the community to confirm it again.
    - **Who came** (facilitator). Enter how many people came to each session. The total is the "M" in the report's "N of M participants".
    - **Confirm levels and agree themes** (community, under *Check the labels* and *Our words*). Confirm every Level 2 file's level (no AI runs on it until then) and add the themes to sort into.
-   - Press **Run** on stage 1 on the **Workflow** page to convert the files (no AI). Do this even with no audio; later stages read the converted files.
+   - Press **Run** on stage 1 on the **Agent Workflow** page to convert the files (no AI). Do this even with no audio; later stages read the converted files.
 2. **Word list and transcripts** (facilitator and analyst, *2 · Audio Processing*). Add names, slang and place words to the word list (`@person` after a person's name), then run stage 2. If a recording has no speakers identified, an amber warning shows; the analyst can re-run stage 2 (speaker labels need the HuggingFace token). To measure the word list, paste a corrected transcript and press **Compute WER**.
 3. **Things people made** (community and analyst, *3 · Image Processing*). Run stage 3, then type what each maker said their piece means. The AI never guesses that.
 4. **Check names, then sort** (analyst, *4 · Draft themes*). Run stage 4. With Level 2 material it stops: add any real name that slipped through, remove anything that isn't a name, press **Names are right** on each file, then run stage 4 again to sort.

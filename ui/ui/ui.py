@@ -155,6 +155,14 @@ def chat_page() -> rx.Component:
         height="100vh", width="100%", spacing="0", background_color=PAGE_BG)
 
 
+# The sidebar and the page are built on the same rows so their lines and text sit level with each other:
+# the divider under the logo block meets the line under the page title, "Agent Workflow" meets the audit bar,
+# and the first step meets the "AI does" cards. The page spaces its blocks 16px apart (spacing="4"); the sidebar
+# spaces its rows 4px apart (spacing="1"), so it adds 12px where the page has 16.
+BAR_H = "64px"    # logo block (sidebar) and title bar (page), each ending in a 1px line
+AUDIT_H = "52px"  # the audit bar (page) and the Agent Workflow row (sidebar)
+
+
 def audit_panel(show_prd_note: bool = True) -> rx.Component:
     return rx.card(
         rx.hstack(
@@ -167,17 +175,17 @@ def audit_panel(show_prd_note: bool = True) -> rx.Component:
             rx.text("PRD §5: zero, no exceptions", size="1", color="gray") if show_prd_note else rx.fragment(),
             rx.text(AppState.audit_total_text, size="1", color="gray"),
             spacing="3", align="center"),
-        size="1", padding="12px 16px")
+        size="1", padding="0 16px", height=AUDIT_H, display="flex", align_items="center")
 
 
 def _nav_style(active):
     return dict(width="100%", padding="7px 10px", border_radius="8px",
-                background_color=rx.cond(active, "var(--accent-4)", "transparent"),
+                background_color=rx.cond(active, "var(--accent-5)", "transparent"),
                 color=rx.cond(active, "var(--accent-12)", "inherit"),
-                font_weight=rx.cond(active, "500", "normal"),
-                box_shadow=rx.cond(active, "inset 3px 0 0 var(--accent-9)", "none"),
+                font_weight=rx.cond(active, "700", "normal"),
+                box_shadow=rx.cond(active, "inset 4px 0 0 var(--accent-9), 0 0 0 1px var(--accent-7)", "none"),
                 transition="background-color 120ms",
-                _hover={"background_color": rx.cond(active, "var(--accent-4)", "var(--gray-4)")})
+                _hover={"background_color": rx.cond(active, "var(--accent-6)", "var(--gray-4)")})
 
 
 def stage_nav() -> rx.Component:
@@ -210,12 +218,17 @@ def stage_nav() -> rx.Component:
             rx.vstack(rx.heading("VCNITY", size="4", line_height="1"),
                       rx.text("AI-assisted co-design analysis", size="1", color="gray"),
                       spacing="1", align="start"),
-            spacing="3", align="center", padding_bottom="8px"),
-        rx.divider(),
-        rx.cond(AppState.role == "facilitator", rx.fragment(),  # the overview runs every stage: analyst work
-                rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Workflow", size="4", line_height="1"),
-                                  spacing="2", align="center"),
-                        href="/pipeline", underline="none", **_nav_style(overview_active))),
+            spacing="3", align="center", width="100%", height=BAR_H, flex_shrink="0",
+            border_bottom="1px solid var(--blue-6)"),
+        # The overview runs every stage: analyst work. The facilitator keeps an empty slot so their steps sit
+        # at the same height as the analyst's.
+        rx.cond(AppState.role == "facilitator",
+                rx.box(height=AUDIT_H, width="100%", flex_shrink="0", margin_top="12px"),
+                rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Agent Workflow", size="4", line_height="1"),
+                                  spacing="2", align="center", height="100%"),
+                        href="/pipeline", underline="none", **{**_nav_style(overview_active), "padding": "0 10px"},
+                        height=AUDIT_H, flex_shrink="0", margin_top="12px")),
+        rx.box(height="8px", width="100%", flex_shrink="0"),  # the column's own 4px gaps make this 16
         rx.foreach(AppState.stage_names, item),
         # Model names are the analyst's business; the facilitator never sees this link or the page.
         rx.cond(AppState.role == "analyst",
@@ -229,7 +242,7 @@ def stage_nav() -> rx.Component:
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
                   rx.text("waiting for a person", size="1", color="gray"), spacing="2", align="center"),
-        spacing="1", align="start", width="275px", min_width="275px", flex_shrink="0", padding="20px",
+        spacing="1", align="start", width="275px", min_width="275px", flex_shrink="0", padding="32px 20px 20px",
         background_color="var(--color-panel-solid)", border_right="1px solid var(--blue-5)", min_height="100vh",
         position="sticky", top="0")
 
@@ -275,7 +288,7 @@ def top_bar(title: str, show_jobs: bool = True, beside_title: rx.Component | Non
                 rx.fragment()) if show_jobs else rx.fragment(),
         rx.cond(AppState.can_ask, chat_button(), rx.fragment()),
         width="100%", align="center", spacing="4", wrap="wrap",
-        padding_bottom="16px", border_bottom="1px solid var(--blue-6)")
+        min_height=BAR_H, border_bottom="1px solid var(--blue-6)")
 
 
 def message_bar() -> rx.Component:
