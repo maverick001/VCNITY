@@ -653,10 +653,10 @@ def transcript_page() -> rx.Component:
                            icon="triangle-alert", color_scheme="amber", width="100%"),
                 rx.fragment()),
         rx.hstack(
-            rx.card(rx.heading("With word list (used downstream)", size="3"),
+            rx.card(rx.heading("Polished Transcript (with wordlist)", size="3"),
                     rx.vstack(rx.foreach(AppState.segments_with, seg_row), spacing="1", max_height="520px",
                               overflow_y="auto"), width="50%"),
-            rx.card(rx.heading("Without word list", size="3"),
+            rx.card(rx.heading("Raw Transcript (without wordlist)", size="3"),
                     rx.vstack(rx.foreach(AppState.segments_without, seg_row), spacing="1", max_height="520px",
                               overflow_y="auto"), width="50%"),
             width="100%", align="start"),
