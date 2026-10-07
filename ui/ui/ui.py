@@ -224,10 +224,14 @@ def stage_nav() -> rx.Component:
         # at the same height as the analyst's.
         rx.cond(AppState.role == "facilitator",
                 rx.box(height=AUDIT_H, width="100%", flex_shrink="0", margin_top="12px"),
-                rx.link(rx.hstack(rx.icon("layout-list", size=18), rx.heading("Agent Workflow", size="4", line_height="1"),
-                                  spacing="2", align="center", height="100%"),
-                        href="/pipeline", underline="none", **{**_nav_style(overview_active), "padding": "0 10px"},
-                        height=AUDIT_H, flex_shrink="0", margin_top="12px")),
+                # Same logo size and left edge as the VCNITY logo above, with the text 12px after it as there. The
+                # row reaches 10px further left (its padding) so the highlight still wraps the logo.
+                rx.link(rx.hstack(rx.image(src="/agent.png", alt="", height="32px", width="32px", flex_shrink="0"),
+                                  rx.heading("Agent Workflow", size="4", line_height="1"),
+                                  spacing="3", align="center", height="100%"),
+                        href="/pipeline", underline="none",
+                        **{**_nav_style(overview_active), "padding": "0 10px", "width": "calc(100% + 10px)"},
+                        height=AUDIT_H, flex_shrink="0", margin_top="12px", margin_left="-10px")),
         rx.box(height="8px", width="100%", flex_shrink="0"),  # the column's own 4px gaps make this 16
         rx.foreach(AppState.stage_names, item),
         # Model names are the analyst's business; the facilitator never sees this link or the page.
