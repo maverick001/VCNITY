@@ -210,6 +210,16 @@ def stage_nav() -> rx.Component:
             rx.tooltip(rx.box(row(s), width="100%", padding="6px 10px", color="var(--gray-10)"),
                        content="Runs in the background — no screen, nothing for a person to do"))
 
+    def top_link(logo: rx.Component, label: str, href: str, active, **extra) -> rx.Component:
+        """Agent Workflow and Model Configuration: a 32px logo at the VCNITY logo's left edge and the text 12px
+        after it, as in the logo block above. The row reaches 10px further left (its padding) so the highlight
+        still wraps the logo."""
+        return rx.link(rx.hstack(logo, rx.heading(label, size="3", line_height="1", white_space="nowrap"),
+                                 spacing="3", align="center", height="100%"),
+                       href=href, underline="none",
+                       **{**_nav_style(active), "padding": "0 10px", "width": "calc(100% + 10px)"},
+                       height=AUDIT_H, flex_shrink="0", margin_left="-10px", **extra)
+
     overview_active = AppState.current_path == "/pipeline"
     return rx.vstack(
         rx.hstack(
@@ -224,29 +234,22 @@ def stage_nav() -> rx.Component:
         # at the same height as the analyst's.
         rx.cond(AppState.role == "facilitator",
                 rx.box(height=AUDIT_H, width="100%", flex_shrink="0", margin_top="12px"),
-                # Same logo size and left edge as the VCNITY logo above, with the text 12px after it as there. The
-                # row reaches 10px further left (its padding) so the highlight still wraps the logo.
-                rx.link(rx.hstack(rx.image(src="/agent.png", alt="", height="32px", width="32px", flex_shrink="0"),
-                                  rx.heading("Agent Workflow", size="4", line_height="1"),
-                                  spacing="3", align="center", height="100%"),
-                        href="/pipeline", underline="none",
-                        **{**_nav_style(overview_active), "padding": "0 10px", "width": "calc(100% + 10px)"},
-                        height=AUDIT_H, flex_shrink="0", margin_top="12px", margin_left="-10px")),
+                top_link(rx.image(src="/agent.png", alt="", height="32px", width="32px", flex_shrink="0"),
+                         "Agent Workflow", "/pipeline", overview_active, margin_top="12px")),
         rx.box(height="8px", width="100%", flex_shrink="0"),  # the column's own 4px gaps make this 16
         rx.foreach(AppState.stage_names, item),
         # Model names are the analyst's business; the facilitator never sees this link or the page.
         rx.cond(AppState.role == "analyst",
                 rx.vstack(rx.divider(margin_y="8px"),
-                          rx.link(rx.hstack(rx.icon("cpu", size=16), rx.text("Model Configuration", size="2"),
-                                            spacing="2", align="center"),
-                                  href="/models", underline="none",
-                                  **_nav_style(AppState.current_path == "/models")),
+                          top_link(rx.center(rx.icon("cpu", size=18, color="white"), background_color="var(--accent-9)",
+                                             border_radius="8px", width="32px", height="32px", flex_shrink="0"),
+                                   "Model Configuration", "/models", AppState.current_path == "/models"),
                           spacing="1", width="100%"),
                 rx.fragment()),
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
                   rx.text("pending human input", size="1", color="gray"), spacing="2", align="center"),
-        spacing="1", align="start", width="275px", min_width="275px", flex_shrink="0", padding="32px 20px 20px",
+        spacing="1", align="start", width="300px", min_width="300px", flex_shrink="0", padding="32px 20px 20px",
         background_color="var(--color-panel-solid)", border_right="1px solid var(--blue-5)", min_height="100vh",
         position="sticky", top="0")
 
