@@ -335,7 +335,7 @@ def page(title: str, *children, beside_title: rx.Component | None = None,
 def file_row(f) -> rx.Component:
     return rx.table.row(
         rx.table.cell(f["filename"]),
-        rx.table.cell(f["kind"]),
+        rx.table.cell(f["file_id_text"]),
         rx.table.cell(
             rx.hstack(level_badge(f["level"]),
                       rx.cond((AppState.role == "facilitator") | (AppState.role == "analyst"),
@@ -490,7 +490,7 @@ def intake_files() -> rx.Component:
                    rx.button("Create a job", on_click=AppState.create_job),
                    rx.table.root(
                        rx.table.header(rx.table.row(
-                           rx.table.column_header_cell("File"), rx.table.column_header_cell("Kind"),
+                           rx.table.column_header_cell("File"), rx.table.column_header_cell("File_ID"),
                            rx.table.column_header_cell("Sensitivity"), rx.table.column_header_cell("Community check"),
                            rx.table.column_header_cell("Consent"))),
                        rx.table.body(rx.foreach(AppState.files, file_row)),
@@ -632,7 +632,11 @@ def transcript_page() -> rx.Component:
         wordlist_card(),
         rx.hstack(
             rx.text("Recording:"),
-            rx.select(AppState.audio_options, value=AppState.selected_file_id.to(str), on_change=AppState.select_file),
+            rx.select.root(
+                rx.select.trigger(placeholder="Choose a recording", min_width="240px"),
+                rx.select.content(rx.foreach(AppState.audio_files,
+                                             lambda f: rx.select.item(f["file_id_text"], value=f["id_text"]))),
+                value=AppState.selected_file_id.to(str), on_change=AppState.select_file),
             rerun_button(2), align="center"),
         rx.cond(AppState.role == "analyst", rx.card(
             rx.heading("What the community word list changed", size="3"),
@@ -654,9 +658,11 @@ def transcript_page() -> rx.Component:
                 rx.fragment()),
         rx.hstack(
             rx.card(rx.heading("Polished Transcript (with wordlist)", size="3"),
+                    rx.text(AppState.selected_clip, size="1", color="gray"),
                     rx.vstack(rx.foreach(AppState.segments_with, seg_row), spacing="1", max_height="520px",
                               overflow_y="auto"), width="50%"),
             rx.card(rx.heading("Raw Transcript (without wordlist)", size="3"),
+                    rx.text(AppState.selected_clip, size="1", color="gray"),
                     rx.vstack(rx.foreach(AppState.segments_without, seg_row), spacing="1", max_height="520px",
                               overflow_y="auto"), width="50%"),
             width="100%", align="start"),

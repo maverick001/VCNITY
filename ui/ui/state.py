@@ -245,9 +245,23 @@ class AppState(rx.State):
     def job_options(self) -> list[str]:
         return [str(j["id"]) for j in self.jobs]
 
+    @staticmethod
+    def _file_labels(files: list[dict]) -> dict[int, str]:
+        """A name for each file by kind and upload order within the job: image_01, image_02, audio_01 ..."""
+        seen: dict[str, int] = {}
+        out: dict[int, str] = {}
+        for f in sorted(files, key=lambda f: f["id"]):
+            seen[f["kind"]] = seen.get(f["kind"], 0) + 1
+            out[f["id"]] = f"{f['kind']}_{seen[f['kind']]:02d}"
+        return out
+
     @rx.var
-    def audio_options(self) -> list[str]:
-        return [str(f["id"]) for f in self.audio_files]
+    def selected_clip(self) -> str:
+        """Which recording the transcript cards are showing, e.g. "audio_01 · FQI recording 3 sep.m4a"."""
+        for f in self.audio_files:
+            if int(f["id"]) == self.selected_file_id:
+                return f"{f['file_id_text']} · {self._nice_name(f['filename'])}"
+        return ""
 
     @rx.var
     def has_client_report(self) -> bool:
@@ -588,8 +602,9 @@ class AppState(rx.State):
         wl = self._api(api.get, "/wordlist") or {}
         self.wordlist_text = wl.get("text", "")
         # The facilitator can set any level; the analyst can only go up from where the file is now.
+        labels = self._file_labels(self.files)
         self.files = [{**f, "level_text": str(f["level"]), "consent_text": f"consent #{f['consent_id']}",
-                       "id_text": str(f["id"]),
+                       "id_text": str(f["id"]), "file_id_text": labels[f["id"]],
                        "level_options": [str(n) for n in (1, 2, 3) if self.role == "facilitator" or n >= f["level"]]}
                       for f in self.files]
         self.audio_files = [f for f in self.files if f["kind"] == "audio"]
