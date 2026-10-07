@@ -198,7 +198,7 @@ def stage_nav() -> rx.Component:
             rx.spacer(),
             rx.cond(s["is_waiting"],
                     rx.tooltip(rx.icon("user-round-pen", size=15, color="var(--amber-10)", flex_shrink="0"),
-                               content="Waiting for a person: " + s["waiting"].to(str)),
+                               content="Pending human input: " + s["waiting"].to(str)),
                     rx.fragment()),
             spacing="2", align="center", width="100%")
 
@@ -245,7 +245,7 @@ def stage_nav() -> rx.Component:
                 rx.fragment()),
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
-                  rx.text("waiting for a person", size="1", color="gray"), spacing="2", align="center"),
+                  rx.text("pending human input", size="1", color="gray"), spacing="2", align="center"),
         spacing="1", align="start", width="275px", min_width="275px", flex_shrink="0", padding="32px 20px 20px",
         background_color="var(--color-panel-solid)", border_right="1px solid var(--blue-5)", min_height="100vh",
         position="sticky", top="0")
