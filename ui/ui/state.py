@@ -256,6 +256,18 @@ class AppState(rx.State):
         return out
 
     @rx.var
+    def audio_labels(self) -> list[str]:
+        return [f["file_id_text"] for f in self.audio_files]
+
+    @rx.var
+    def selected_audio_label(self) -> str:
+        """The Recording box's value: the ID of the clip being shown, e.g. "audio_01"."""
+        for f in self.audio_files:
+            if int(f["id"]) == self.selected_file_id:
+                return f["file_id_text"]
+        return ""
+
+    @rx.var
     def selected_clip(self) -> str:
         """Which recording the transcript cards are showing, e.g. "audio_01 · FQI recording 3 sep.m4a"."""
         for f in self.audio_files:
@@ -990,9 +1002,12 @@ class AppState(rx.State):
 
     # ---------- transcript ----------
 
-    def select_file(self, v: str):
-        self.selected_file_id = int(v)
-        self._load_transcript()
+    def select_clip(self, label: str):
+        for f in self.audio_files:
+            if f["file_id_text"] == label:
+                self.selected_file_id = int(f["id"])
+                self._load_transcript()
+                return
 
     def compute_wer(self):
         cmp = self._api(api.post, f"/jobs/{self.job_id}/compare/{self.selected_file_id}",

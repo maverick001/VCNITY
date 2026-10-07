@@ -632,11 +632,8 @@ def transcript_page() -> rx.Component:
         wordlist_card(),
         rx.hstack(
             rx.text("Recording:"),
-            rx.select.root(
-                rx.select.trigger(placeholder="Choose a recording", min_width="240px"),
-                rx.select.content(rx.foreach(AppState.audio_files,
-                                             lambda f: rx.select.item(f["file_id_text"], value=f["id_text"]))),
-                value=AppState.selected_file_id.to(str), on_change=AppState.select_file),
+            rx.select(AppState.audio_labels, value=AppState.selected_audio_label, on_change=AppState.select_clip,
+                      width="130px"),
             rerun_button(2), align="center"),
         rx.cond(AppState.role == "analyst", rx.card(
             rx.heading("What the community word list changed", size="3"),
