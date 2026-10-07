@@ -985,11 +985,13 @@ def model_step_card(st) -> rx.Component:
 
 
 def model_source_logos() -> rx.Component:
-    # Where the local models come from; decoration only. Sized to sit inside the heading row.
+    # Where the local models come from; each logo links to that site in a new tab. Sized to sit inside the heading row.
     return rx.hstack(
-        *[rx.image(src=f"/{f}", alt=name, height="28px", width="28px", border_radius="6px", object_fit="cover")
-          for name, f in (("Hugging Face", "logo_huggingface.png"), ("Ollama", "logo_ollama.jpg"),
-                          ("Kaggle", "logo_kaggle.png"))],
+        *[rx.link(rx.image(src=f"/{f}", alt=name, height="28px", width="28px", border_radius="6px", object_fit="cover"),
+                  href=url, is_external=True, title=name)
+          for name, f, url in (("Hugging Face", "logo_huggingface.png", "https://huggingface.co"),
+                               ("Ollama", "logo_ollama.jpg", "https://ollama.com"),
+                               ("Kaggle", "logo_kaggle.png", "https://www.kaggle.com"))],
         spacing="2", align="center")
 
 
