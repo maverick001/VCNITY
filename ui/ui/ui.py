@@ -611,10 +611,10 @@ def seg_row(s) -> rx.Component:
     return rx.hstack(
         rx.text(s["start_text"], size="1", color="gray", width="52px", min_width="52px"),
         rx.badge(s["speaker_text"], size="1", color_scheme=s["speaker_color"], font_weight="bold"),
-        rx.text(s["text"], size="2", color=s["text_color"],
-                background_color=rx.cond(s["unsure"], "var(--amber-3)", "transparent")),
+        rx.text(s["text"], size="2", color="var(--gray-12)"),
         rx.cond(s["unsure"], rx.badge("not sure — needs human check", color_scheme="amber", size="1"), rx.fragment()),
-        align="start", spacing="2", width="100%")
+        align="start", spacing="2", width="100%", padding="4px 8px", border_radius="var(--radius-2)",
+        background_color=s["row_bg"])
 
 
 def diff_chunk(d) -> rx.Component:

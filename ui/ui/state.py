@@ -682,11 +682,11 @@ class AppState(rx.State):
     def _shape_segment(s: dict, numbers: dict[str, int]) -> dict:
         out = {**s, "start_text": f"{s['start']:.1f}"}
         if not s["speaker"]:
-            return {**out, "speaker_text": "Unknown", "speaker_color": "gray", "text_color": "inherit"}
+            return {**out, "speaker_text": "Unknown", "speaker_color": "gray", "row_bg": "var(--gray-3)"}
         n = numbers.setdefault(s["speaker"], len(numbers) + 1)
         color = SPEAKER_COLORS[(n - 1) % len(SPEAKER_COLORS)]
         return {**out, "speaker_text": f"SPEAKER_{n:02d}", "speaker_color": color,
-                "text_color": f"var(--{color}-11)"}
+                "row_bg": f"var(--{color}-3)"}
 
     def _load_transcript(self):
         fid = self.selected_file_id
