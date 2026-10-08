@@ -93,3 +93,26 @@ def test_ai_allowed_gate():
     assert ai_allowed(SimpleNamespace(level=2, level_confirmed_by_community=False)) is False
     assert ai_allowed(SimpleNamespace(level=2, level_confirmed_by_community=True)) is True
     assert ai_allowed(SimpleNamespace(level=3, level_confirmed_by_community=True)) is False
+
+
+def test_stage_2b_uses_the_speaker_model_the_job_picked(db_session, monkeypatch, tmp_path):
+    from vcnity import model_choice
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"x")
+    job = Job(name="speakers"); db_session.add(job); db_session.flush()
+    f = SourceFile(job_id=job.id, filename="a.m4a", kind="audio", level=1, path="x", sha256="0" * 64,
+                   provenance={"ingested_path": str(wav)})
+    db_session.add(f); db_session.flush()
+    db_session.add(Segment(file_id=f.id, variant="with_wordlist", start_s=0, end_s=2, text="hi"))
+    db_session.flush()
+    used = []
+    monkeypatch.setattr(s2b_diarise, "diarise", lambda w, name: used.append(name) or [(0.0, 2.0, "SPEAKER_00")])
+    monkeypatch.setattr(s2b_diarise, "ai_allowed", lambda sf: True)
+    monkeypatch.setattr(model_choice, "available", lambda: {"diarise": [{"name": "pyannote/speaker-diarization-community-1"}]})
+
+    assert s2b_diarise.run(db_session, job.id)["model"] == "pyannote/speaker-diarization-3.1"   # no pick: default
+    model_choice.set_choices(db_session, job.id, {"2b": "pyannote/speaker-diarization-community-1"})
+    report = s2b_diarise.run(db_session, job.id)
+    assert used == ["pyannote/speaker-diarization-3.1", "pyannote/speaker-diarization-community-1"]
+    assert report["model"] == "pyannote/speaker-diarization-community-1"

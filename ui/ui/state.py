@@ -1129,10 +1129,17 @@ class AppState(rx.State):
 
             opts = [{**o, "label": label(o)} for o in st["options"]]
             picked = next((o for o in opts if o["name"] == st["chosen"]), None)
+            # Audio processing also has "who is speaking"; every other step gets an empty one so the card reads alike.
+            dz = st.get("diarise") or {"options": [], "chosen": "", "default": "", "name": "", "does": "",
+                                       "chosen_display": ""}
+            dopts = [{**o, "label": label(o)} for o in dz["options"]]
+            dz = {**dz, "options": dopts, "is_default": dz["chosen"] == dz["default"],
+                  "missing": bool(dz["chosen"]) and not any(o["name"] == dz["chosen"] for o in dopts)}
             steps.append({**st, "options": opts, "title": f"{st['stage']} · {st['name']}",
                           "is_default": st["chosen"] == st["default"],
                           "missing": picked is None,  # the pick, or the default, isn't on this laptop any more
-                          "heavy": bool(picked and picked["heavy"])})
+                          "heavy": bool(picked and picked["heavy"]),
+                          "has_diarise": bool(st.get("diarise")), "diarise": dz})
         self.model_steps = steps
 
     def set_model(self, stage: int, model: str):
@@ -1144,6 +1151,18 @@ class AppState(rx.State):
         self._say(f"{step.get('name', 'Step')} now uses {shown}." +
                   (f" Stage {stage} has already run with the old one — re-run it, and the stages after it, "
                    "to use the new one." if step.get("done") else ""), "ok")
+        self.load_models()
+
+    def set_diarise_model(self, model: str):
+        out = self._api(api.put, f"/jobs/{self.job_id}/models", {"models": {"2b": model}})
+        if out is None:
+            return
+        step = next((s for s in self.model_steps if int(s["stage"]) == 2), {})
+        dz = step.get("diarise", {})
+        shown = next((o.get("display") or o["name"] for o in dz.get("options", []) if o["name"] == model), model)
+        self._say(f"Speaker Diarization now uses {shown}." +
+                  (" Re-run Audio Processing to use it: the transcripts are kept and only the speaker labels "
+                   "are redone." if step.get("done") else ""), "ok")
         self.load_models()
 
     # ---------- chat with the data ----------

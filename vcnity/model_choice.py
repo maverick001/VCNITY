@@ -15,14 +15,34 @@ from .config import settings
 from .models import Job
 
 DEFAULT_SPEECH = os.environ.get("VCNITY_ASR_MODEL", "large-v3")
+DEFAULT_DIARISE = os.environ.get("VCNITY_DIARISE_MODEL", "pyannote/speaker-diarization-3.1")
+
+# Speaker diarization is a second choice inside step 2: a different model from the one that writes the words, run by
+# stage 2b. It is saved in the same jobs.models under its own key, and chosen on the same page.
+DIARISE_KEY = "2b"
+DIARISE_STEP = ("Speaker Diarization", "diarise", "Works out which voice is which. Doesn't change the words.")
+# Each speaker model and the Hugging Face files it needs on this laptop (3.1 borrows two other repos' weights).
+DIARISE_MODELS: dict[str, list[tuple[str, str]]] = {
+    "pyannote/speaker-diarization-3.1": [
+        ("pyannote/speaker-diarization-3.1", "config.yaml"),
+        ("pyannote/segmentation-3.0", "pytorch_model.bin"),
+        ("pyannote/wespeaker-voxceleb-resnet34-LM", "pytorch_model.bin"),
+    ],
+    "pyannote/speaker-diarization-community-1": [
+        ("pyannote/speaker-diarization-community-1", "config.yaml"),
+        ("pyannote/speaker-diarization-community-1", "segmentation/pytorch_model.bin"),
+        ("pyannote/speaker-diarization-community-1", "embedding/pytorch_model.bin"),
+        ("pyannote/speaker-diarization-community-1", "plda/plda.npz"),
+    ],
+}
 
 # step → (name on screen, kind of model, what it does)
 STEPS: dict[int, tuple[str, str, str]] = {
-    2: ("Audio processing", "speech", "Turns recordings into text."),
-    3: ("Image processing", "vision", "Reads what's written in photos of things people made."),
-    4: ("Draft themes", "text", "Finds names to swap in Level 2 material, and names each group of quotes."),
-    5: ("Evidence check", "text", "Checks every theme's summary against its quotes."),
-    7: ("Security check", "text", "Looks for anything in a theme that could give someone away."),
+    2: ("Audio Processing", "speech", "Turns recordings into text."),
+    3: ("Image Processing", "vision", "Reads what's written in photos of things people made."),
+    4: ("Draft Themes", "text", "Finds names to swap in Level 2 material, and names each group of quotes."),
+    5: ("Evidence Check", "text", "Checks every theme's summary against its quotes."),
+    7: ("Security Check", "text", "Looks for anything in a theme that could give someone away."),
     8: ("Reporting", "text", "Drafts the findings in the client report."),
 }
 
@@ -42,6 +62,8 @@ SPEECH_PARAMS = {
 
 def display_name(kind: str, name: str) -> str:
     """What the analyst sees. faster-whisper knows its models by short names ("large-v3"); show the full one."""
+    if kind == "diarise":
+        return name.split("/")[-1]
     return f"faster-whisper-{name}" if kind == "speech" and not name.startswith("faster-whisper-") else name
 
 
@@ -56,7 +78,9 @@ def _params_b(text: str | None) -> str:
     return text if text.endswith("B") else ""
 
 
-def default_for(stage: int) -> str:
+def default_for(stage: int | str) -> str:
+    if str(stage) == DIARISE_KEY:
+        return DEFAULT_DIARISE
     kind = STEPS.get(stage, ("", "text", ""))[1]
     return {"speech": DEFAULT_SPEECH, "vision": settings.ollama_vision_model}.get(kind, settings.ollama_model)
 
@@ -68,8 +92,14 @@ def chosen(session, job_id: int, stage: int) -> str:
     return picked or default_for(stage)
 
 
-def _folder_gb(path: Path) -> float:
-    return round(sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e9, 1)
+def chosen_diarise(session, job_id: int) -> str:
+    """The speaker-detection model for this job (Hugging Face repo name)."""
+    job = session.get(Job, job_id) if session is not None else None
+    return ((job.models or {}).get(DIARISE_KEY) if job is not None else None) or DEFAULT_DIARISE
+
+
+def _folder_gb(path: Path, digits: int = 1) -> float:
+    return round(sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e9, digits)
 
 
 def speech_models() -> list[dict]:
@@ -84,6 +114,20 @@ def speech_models() -> list[dict]:
             seen.add(repo)
             out.append({"name": name, "display": display_name("speech", name), "size_gb": _folder_gb(folder),
                         "source": repo.split("/")[0], "params": SPEECH_PARAMS.get(name.removesuffix(".en"), "")})
+    return out
+
+
+def diarise_models() -> list[dict]:
+    """Speaker-detection models whose files are all in the Hugging Face cache already (pyannote needs HF_TOKEN once,
+    to download; after that it runs fully local)."""
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    cache, out = Path(HF_HUB_CACHE), []
+    for name, needs in DIARISE_MODELS.items():
+        if all(any((cache / f"models--{repo.replace('/', '--')}").glob(f"snapshots/*/{file}")) for repo, file in needs):
+            size = sum(_folder_gb(cache / f"models--{repo.replace('/', '--')}", 3) for repo in {r for r, _ in needs})
+            out.append({"name": name, "display": display_name("diarise", name), "size_gb": round(size, 2),
+                        "source": name.split("/")[0], "params": ""})
     return out
 
 
@@ -114,7 +158,11 @@ def available() -> dict:
         speech = speech_models()
     except Exception:  # noqa: BLE001
         speech = []
-    return {"speech": speech, "vision": vision, "text": text, "ollama_error": error}
+    try:
+        diarise = diarise_models()
+    except Exception:  # noqa: BLE001
+        diarise = []
+    return {"speech": speech, "vision": vision, "text": text, "diarise": diarise, "ollama_error": error}
 
 
 def set_choices(session, job_id: int, choices: dict) -> dict:
@@ -125,6 +173,11 @@ def set_choices(session, job_id: int, choices: dict) -> dict:
     have = available()
     current = dict(job.models or {})
     for stage_text, model in choices.items():
+        if str(stage_text) == DIARISE_KEY:
+            if model not in {m["name"] for m in have.get("diarise", [])}:
+                raise ValueError(f"'{model}' isn't a speaker-detection model on this laptop")
+            current[DIARISE_KEY] = model
+            continue
         stage = int(stage_text)
         if stage not in STEPS:
             raise ValueError(f"step {stage} has no model to choose")

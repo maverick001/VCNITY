@@ -973,6 +973,30 @@ def reportback_page() -> rx.Component:
 
 # ---------------------------------------------------------------- model settings (analyst)
 
+def diarise_picker(dz) -> rx.Component:
+    # The second choice inside Audio processing: which model works out who is speaking (the first one writes the words).
+    return rx.vstack(
+        rx.hstack(rx.text(dz["name"], weight="bold", size="2"),
+                  rx.cond(dz["is_default"], rx.badge("default", color_scheme="gray"), rx.fragment()),
+                  align="center", spacing="2"),
+        rx.text(dz["does"], size="2", color="gray"),
+        rx.cond(
+            dz["options"].to(list).length() > 0,
+            rx.select.root(
+                rx.select.trigger(min_width="320px"),
+                rx.select.content(rx.foreach(dz["options"].to(list[dict[str, Any]]),
+                                             lambda o: rx.select.item(o["label"], value=o["name"]))),
+                value=dz["chosen"].to(str),
+                on_change=AppState.set_diarise_model),
+            rx.text("No speaker model on this laptop.", size="2", color="var(--red-11)")),
+        rx.cond(dz["missing"] & (dz["options"].to(list).length() > 0),
+                rx.callout(rx.text(dz["chosen_display"], " isn't on this laptop any more. Pick another before this "
+                                                         "step runs."), icon="triangle-alert", color_scheme="red",
+                           size="1"),
+                rx.fragment()),
+        spacing="2", align="start", width="100%", padding_top="12px")
+
+
 def model_step_card(st) -> rx.Component:
     return rx.card(
         rx.vstack(
@@ -981,6 +1005,7 @@ def model_step_card(st) -> rx.Component:
                       rx.cond(st["done"], rx.badge("already run", color_scheme="blue"), rx.fragment()),
                       align="center", spacing="2", wrap="wrap"),
             rx.text(st["does"], size="2", color="gray"),
+            rx.cond(st["has_diarise"], rx.text("Speech-to-Text", weight="bold", size="2"), rx.fragment()),
             rx.cond(
                 st["options"].to(list).length() > 0,
                 rx.select.root(
@@ -999,6 +1024,7 @@ def model_step_card(st) -> rx.Component:
                     rx.callout("This model is large for a 16GB laptop. It may run slowly or not load while the "
                                "rest of the app is open.", icon="triangle-alert", color_scheme="amber", size="1"),
                     rx.fragment()),
+            rx.cond(st["has_diarise"], diarise_picker(st["diarise"].to(dict[str, Any])), rx.fragment()),
             rx.cond(st["done"],
                     rx.text("Changing it doesn't touch what this step already made. Re-run it, and the steps "
                             "after it, to use the new model.", size="1", color="gray"),

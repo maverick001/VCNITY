@@ -1,5 +1,6 @@
-"""Stage 2b — who's speaking. pyannote speaker-diarization-3.1, fully local
-after the one-time download. Needs HF_TOKEN; without it the stage says so and
+"""Stage 2b — who's speaking. A pyannote speaker-diarization pipeline, fully local
+after the one-time download: 3.1 by default, or community-1 if the analyst picks
+it for the job (model_choice.py). Needs HF_TOKEN; without it the stage says so and
 leaves speakers blank rather than failing the pipeline.
 """
 from __future__ import annotations
@@ -8,22 +9,27 @@ import logging
 import wave
 from pathlib import Path
 
+from .. import model_choice
 from ..audit import record_call
 from ..config import settings
 from ..models import Job, Segment, SourceFile
 from ._gate import ai_allowed, why_not
 
 log = logging.getLogger(__name__)
-DIAR_MODEL = "pyannote/speaker-diarization-3.1"
+DIAR_MODEL = model_choice.DEFAULT_DIARISE
 _pipeline = None
+_pipeline_name = ""
 
 
-def _pipe():
-    global _pipeline
-    if _pipeline is None:
+def _pipe(name: str = DIAR_MODEL):
+    """One speaker model in memory at a time: a different one replaces it rather than joining it."""
+    global _pipeline, _pipeline_name
+    if _pipeline is None or _pipeline_name != name:
         from pyannote.audio import Pipeline
 
-        _pipeline = Pipeline.from_pretrained(DIAR_MODEL, token=settings.hf_token)
+        _pipeline = None  # let the old one go before the new one loads — 16GB, no GPU
+        _pipeline = Pipeline.from_pretrained(name, token=settings.hf_token)
+        _pipeline_name = name
     return _pipeline
 
 
@@ -41,11 +47,11 @@ def _load_wav(wav: Path) -> dict:
     return {"waveform": torch.from_numpy(np.ascontiguousarray(x)), "sample_rate": sr}
 
 
-def diarise(wav: Path) -> list[tuple[float, float, str]]:
+def diarise(wav: Path, model_name: str = DIAR_MODEL) -> list[tuple[float, float, str]]:
     if not settings.hf_token:
         log.warning("HF_TOKEN not set — skipping diarisation (see app/.env.example)")
         return []
-    result = _pipe()(_load_wav(wav))
+    result = _pipe(model_name)(_load_wav(wav))
     # pyannote 4 returns a DiarizeOutput; 3.x returned an Annotation directly.
     ann = getattr(result, "speaker_diarization", result)
     turns = []
@@ -66,7 +72,8 @@ def merge_speakers(segments, turns: list[tuple[float, float, str]]) -> None:
 
 
 def run(session, job_id: int, files: list[int] | None = None) -> dict:
-    report: dict = {"files": [], "token_present": bool(settings.hf_token)}
+    name = model_choice.chosen_diarise(session, job_id)
+    report: dict = {"files": [], "token_present": bool(settings.hf_token), "model": name}
     q = session.query(SourceFile).filter_by(job_id=job_id, kind="audio")
     if files:
         q = q.filter(SourceFile.id.in_(files))
@@ -76,14 +83,14 @@ def run(session, job_id: int, files: list[int] | None = None) -> dict:
             entry["skipped"] = why_not(sf)
         else:
             wav = Path(sf.provenance.get("ingested_path", ""))
-            turns = diarise(wav) if wav.exists() else []
+            turns = diarise(wav, name) if wav.exists() else []
             segs = session.query(Segment).filter_by(file_id=sf.id).all()
             merge_speakers(segs, turns)
             entry["turns"] = len(turns)
             entry["speakers"] = sorted({t[2] for t in turns})
             if turns:
-                record_call(session, job_id=job_id, stage=2, provider=f"pyannote:{DIAR_MODEL}", is_local=True,
-                            level=sf.level, model=DIAR_MODEL, purpose="diarisation")
+                record_call(session, job_id=job_id, stage=2, provider=f"pyannote:{name}", is_local=True,
+                            level=sf.level, model=name, purpose="diarisation")
         report["files"].append(entry)
     job = session.get(Job, job_id)
     job.status = "stage2b:done"

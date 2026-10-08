@@ -604,6 +604,14 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
                               "chosen": chosen, "chosen_display": model_choice.display_name(kind, chosen),
                               "default": model_choice.default_for(n),
                               "done": done.get(n, False), "options": options})
+                if n == 2:  # who is speaking: a second choice inside Audio processing
+                    dn, dkind, ddoes = model_choice.DIARISE_STEP
+                    dchosen = model_choice.chosen_diarise(s, job_id)
+                    steps[-1]["diarise"] = {
+                        "key": model_choice.DIARISE_KEY, "name": dn, "does": ddoes, "chosen": dchosen,
+                        "chosen_display": model_choice.display_name(dkind, dchosen),
+                        "default": model_choice.DEFAULT_DIARISE,
+                        "options": [{**m, "heavy": False} for m in have.get("diarise", [])]}
         return jsonify({"steps": steps, "ollama_error": have["ollama_error"],
                         "memory_warn_gb": model_choice.MEMORY_WARN_GB})
 
