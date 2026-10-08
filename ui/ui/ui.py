@@ -628,8 +628,6 @@ def diff_chunk(d) -> rx.Component:
 def transcript_page() -> rx.Component:
     return page(
         "2 · Audio Processing",
-        stage_header(2),
-        wordlist_card(),
         rx.hstack(
             rx.text("Recording:"),
             rx.select(AppState.audio_labels, value=AppState.selected_audio_label, on_change=AppState.select_clip,
@@ -663,6 +661,8 @@ def transcript_page() -> rx.Component:
                     rx.vstack(rx.foreach(AppState.segments_without, seg_row), spacing="1", max_height="520px",
                               overflow_y="auto"), width="50%"),
             width="100%", align="start"),
+        stage_header(2),
+        wordlist_card(),
     )
 
 
