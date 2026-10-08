@@ -614,7 +614,7 @@ def seg_row(s) -> rx.Component:
         rx.text(s["text"], size="2", color="var(--gray-12)"),
         rx.cond(s["unsure"], rx.badge("not sure — needs human check", color_scheme="amber", size="1"), rx.fragment()),
         align="start", spacing="2", width="100%", padding="4px 8px", border_radius="var(--radius-2)",
-        background_color=s["row_bg"])
+        background_color=s["row_bg"], border_left=s["row_bar"])
 
 
 def diff_chunk(d) -> rx.Component:

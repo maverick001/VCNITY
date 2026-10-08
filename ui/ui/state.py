@@ -25,7 +25,8 @@ LEVEL_WORDS = {
                       "touches it, and it never reaches the client."),
 }
 # One colour per speaker on the Audio Processing page; repeats after eight voices.
-SPEAKER_COLORS = ("blue", "orange", "grass", "purple", "tomato", "cyan", "pink", "brown")
+# Far-apart hues in this order, so speakers 1-4 (the usual case) never look alike side by side.
+SPEAKER_COLORS = ("blue", "orange", "grass", "purple", "pink", "cyan", "yellow", "brown")
 # Stage 1 is Data Ingestion: PRD §4's Intake (stage 0) and Ingest (stage 1) merged.
 STAGE_ROUTES = {1: "/", 2: "/transcript", 3: "/artefacts", 4: "/themes", 5: "/themes",
                 6: "/signoff", 7: "/identify", 8: "/report", 9: "/reportback"}
@@ -682,11 +683,12 @@ class AppState(rx.State):
     def _shape_segment(s: dict, numbers: dict[str, int]) -> dict:
         out = {**s, "start_text": f"{s['start']:.1f}"}
         if not s["speaker"]:
-            return {**out, "speaker_text": "Unknown", "speaker_color": "gray", "row_bg": "var(--gray-3)"}
+            return {**out, "speaker_text": "Unknown", "speaker_color": "gray",
+                    "row_bg": "var(--gray-4)", "row_bar": "4px solid var(--gray-8)"}
         n = numbers.setdefault(s["speaker"], len(numbers) + 1)
         color = SPEAKER_COLORS[(n - 1) % len(SPEAKER_COLORS)]
         return {**out, "speaker_text": f"SPEAKER_{n:02d}", "speaker_color": color,
-                "row_bg": f"var(--{color}-3)"}
+                "row_bg": f"var(--{color}-4)", "row_bar": f"4px solid var(--{color}-9)"}
 
     def _load_transcript(self):
         fid = self.selected_file_id
