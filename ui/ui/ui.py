@@ -633,19 +633,6 @@ def transcript_page() -> rx.Component:
             rx.select(AppState.audio_labels, value=AppState.selected_audio_label, on_change=AppState.select_clip,
                       width="130px"),
             rerun_button(2), align="center"),
-        rx.cond(AppState.role == "analyst", rx.card(
-            rx.heading("What the community word list changed", size="3"),
-            rx.text(AppState.compare_line, size="2"),
-            rx.text(AppState.compare_note, size="1", color="gray"),
-            rx.box(rx.foreach(AppState.diff, diff_chunk), max_height="220px", overflow_y="auto",
-                   padding="8px", border="1px solid var(--gray-5)", border_radius="6px"),
-            rx.text("Paste a human-corrected transcript for this recording to get a real WER:", size="1", color="gray"),
-            rx.text_area(value=AppState.reference_text, on_change=AppState.set_reference_text, rows="3", width="100%"),
-            rx.hstack(rx.button("Compute WER", size="1", on_click=AppState.compute_wer),
-                      rx.cond(AppState.has_reference_wer,
-                              rx.text(AppState.reference_wer_line, size="2", weight="bold"), rx.fragment())),
-            rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
-            width="100%"), rx.fragment()),
         rx.cond(AppState.speakers_missing,
                 rx.callout("Speakers not identified for this recording, so every line shows \"Unknown\" instead of who "
                            "spoke. The analyst can re-run stage 2 to try again.",
@@ -663,6 +650,19 @@ def transcript_page() -> rx.Component:
             width="100%", align="start"),
         stage_header(2),
         wordlist_card(),
+        rx.cond(AppState.role == "analyst", rx.card(
+            rx.heading("What the community word list changed", size="3"),
+            rx.text(AppState.compare_line, size="2"),
+            rx.text(AppState.compare_note, size="1", color="gray"),
+            rx.box(rx.foreach(AppState.diff, diff_chunk), max_height="220px", overflow_y="auto",
+                   padding="8px", border="1px solid var(--gray-5)", border_radius="6px"),
+            rx.text("Paste a human-corrected transcript for this recording to get a real WER:", size="1", color="gray"),
+            rx.text_area(value=AppState.reference_text, on_change=AppState.set_reference_text, rows="3", width="100%"),
+            rx.hstack(rx.button("Compute WER", size="1", on_click=AppState.compute_wer),
+                      rx.cond(AppState.has_reference_wer,
+                              rx.text(AppState.reference_wer_line, size="2", weight="bold"), rx.fragment())),
+            rx.cond(AppState.terms_line != "", rx.text(AppState.terms_line, size="2"), rx.fragment()),
+            width="100%"), rx.fragment()),
     )
 
 
