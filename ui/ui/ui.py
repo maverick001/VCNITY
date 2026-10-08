@@ -479,7 +479,7 @@ def wordlist_card() -> rx.Component:
     return rx.card(
         rx.heading("Community word list", size="3"),
         rx.text("Names, slang, local place words — one per line. Add @person after a name so Level 2 material gets "
-                "a made-up name for it. Re-run this stage after saving.", size="1", color="gray"),
+                "a made-up name for it. Re-run after saving.", size="1", color="gray"),
         rx.text_area(value=AppState.wordlist_text, on_change=AppState.set_wordlist_text, rows="6", width="100%"),
         rx.button("Save word list", on_click=AppState.save_wordlist, size="2"),
         width="100%")
