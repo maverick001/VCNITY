@@ -248,7 +248,7 @@ def stage_nav() -> rx.Component:
                 rx.fragment()),
         rx.spacer(),
         rx.hstack(rx.icon("user-round-pen", size=14, color="var(--amber-10)"),
-                  rx.text("pending human input", size="1", color="gray"), spacing="2", align="center"),
+                  rx.text("pending human input", size="2", color="var(--gray-12)"), spacing="2", align="center"),
         spacing="1", align="start", width="300px", min_width="300px", flex_shrink="0", padding="32px 20px 20px",
         background_color="var(--color-panel-solid)", border_right="1px solid var(--blue-5)", min_height="100vh",
         position="sticky", top="0")
