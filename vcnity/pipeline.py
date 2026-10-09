@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from .models import IdentifyFlag, Job, Report, Segment, SourceFile, Theme, ThemeQuote, Unit
+from .models import Artefact, IdentifyFlag, Job, Report, Segment, SourceFile, Theme, ThemeQuote, Unit
 from .stages import (s0_intake, s1_ingest, s2_transcribe, s2b_diarise, s3_artefacts, s4_themes,
                      s5_evidence, s6_signoff, s7_identify, s8_report, s9_reportback)
 
@@ -63,8 +63,8 @@ STAGES: dict[int, Callable] = {
 
 def _check_gates(session, job_id: int, n: int) -> None:
     if n in AI_STAGES:
-        waiting = [f.filename for f in session.query(SourceFile).filter_by(job_id=job_id).all()
-                   if f.level == 2 and not f.level_confirmed_by_community]
+        waiting = [name for (name,) in session.query(SourceFile.filename).filter_by(
+            job_id=job_id, level=2, level_confirmed_by_community=False).order_by(SourceFile.id)]
         if waiting:
             raise GateError("Level 2 material is waiting for a community reviewer to confirm its level "
                             f"(PRD A9): {waiting}")
@@ -106,9 +106,10 @@ def change_level(session, file_id: int, new_level: int, actor_role: str = "facil
         touched: set[int] = set()
         for u in units:
             u.excluded = True
-            for tq in session.query(ThemeQuote).filter_by(unit_id=u.id).all():
-                touched.add(tq.theme_id)
-                session.delete(tq)
+        unit_ids = [u.id for u in units]
+        for tq in (session.query(ThemeQuote).filter(ThemeQuote.unit_id.in_(unit_ids)).all() if unit_ids else []):
+            touched.add(tq.theme_id)
+            session.delete(tq)
         session.query(Segment).filter_by(file_id=file_id).delete(synchronize_session=False)
         session.flush()
         for tid in touched:
@@ -133,7 +134,7 @@ def reset_job(session, job_id: int, exports_dir: Path | None = None) -> dict:
     stage 1 runs again. Pictures ingest pulled out of slides are removed — stage 1
     pulls them out again.
     """
-    from .models import Artefact, Pseudonym, Review
+    from .models import Pseudonym, Review
     from .stages.s1_ingest import brief_from_xlsx
 
     job = session.get(Job, job_id)
@@ -187,8 +188,6 @@ def status(session, job_id: int) -> dict:
     flags = (session.query(IdentifyFlag).join(Theme, Theme.id == IdentifyFlag.theme_id)
              .filter(Theme.job_id == job_id).all())
     reports = {r.kind: r for r in session.query(Report).filter_by(job_id=job_id).all()}
-    from .stages.s3_artefacts import Artefact
-
     arts = session.query(Artefact).join(SourceFile).filter(SourceFile.job_id == job_id).count()
     waiting_l2 = [f.filename for f in files if f.level == 2 and not f.level_confirmed_by_community]
     quoted = session.query(ThemeQuote).join(Theme).filter(Theme.job_id == job_id).count()
@@ -208,11 +207,12 @@ def status(session, job_id: int) -> dict:
     # What each stage is waiting on a person for, in a few words; "" when nothing.
     waiting_names = s4_themes.waiting_name_check(session, job_id)
     uncounted = s7_identify.uncounted(session, job_id)
+    attendance = s0_intake.attendance_total(job)
     open_flags = [f for f in flags if f.decision is None]
     client, back = reports.get("client"), reports.get("reportback")
     waiting = {
         1: ("community to confirm levels" if waiting_l2 else
-            "who came" if files and not s0_intake.attendance_total(job) else ""),
+            "who came" if files and not attendance else ""),
         4: "name check" if waiting_names else "",
         6: "community sign-off" if any(t.decided_by is None for t in themes if t.status != "unsupported") else "",
         7: ("people counts" if uncounted else "analyst decisions" if open_flags else ""),
@@ -229,6 +229,6 @@ def status(session, job_id: int) -> dict:
         "open_flags": len(open_flags),
         "waiting_level2": waiting_l2,
         "waiting_names": waiting_names,
-        "attendance_total": s0_intake.attendance_total(job),
+        "attendance_total": attendance,
         "uncounted": uncounted,
     }

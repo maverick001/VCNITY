@@ -131,6 +131,11 @@ def diarise_models() -> list[dict]:
     return out
 
 
+# What `ollama show` said about each model build (name@digest): its capabilities and parameter size. A build never
+# changes, so the /models page asks once per build instead of once per model on every load.
+_shown: dict[str, tuple[list[str], str]] = {}
+
+
 def ollama_models() -> tuple[list[dict], list[dict], str]:
     """(text models, vision models, error). Ollama decides what each model can do."""
     try:
@@ -139,10 +144,15 @@ def ollama_models() -> tuple[list[dict], list[dict], str]:
         client = ollama.Client()
         text, vision = [], []
         for m in client.list().models:
-            info = client.show(m.model)
-            caps = list(getattr(info, "capabilities", None) or [])
+            digest = getattr(m, "digest", None)
+            key = f"{m.model}@{digest}"
+            if not digest or key not in _shown:
+                info = client.show(m.model)
+                _shown[key] = (list(getattr(info, "capabilities", None) or []),
+                               _params_b(getattr(getattr(info, "details", None), "parameter_size", None)))
+            caps, params = _shown[key]
             row = {"name": m.model, "display": m.model, "size_gb": round((m.size or 0) / 1e9, 1), "source": "Ollama",
-                   "params": _params_b(getattr(getattr(info, "details", None), "parameter_size", None))}
+                   "params": params}
             if "vision" in caps:
                 vision.append(row)
             if "completion" in caps:

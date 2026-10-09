@@ -24,6 +24,7 @@ import re
 import threading
 
 import numpy as np
+from sqlalchemy.orm import selectinload
 
 from .config import settings
 from .models import Job, Segment, SourceFile, Theme, Unit
@@ -176,7 +177,8 @@ def job_summary(session, job_id: int) -> str:
         lines.append(f"- file {f.filename}: {f.kind}, Level {f.level}{extra}{note}")
     total = s0_intake.attendance_total(job)
     lines.append(f"Attendance: {total} people" if total else "Attendance: not entered yet")
-    for t in session.query(Theme).filter(Theme.job_id == job_id, Theme.status != "unsupported").order_by(Theme.id):
+    for t in (session.query(Theme).filter(Theme.job_id == job_id, Theme.status != "unsupported")
+              .options(selectinload(Theme.quotes)).order_by(Theme.id)):
         counted = f"{t.people_count} people counted" if t.people_count is not None else "not counted"
         lines.append(f"- theme '{t.label}': {t.status}, {len(t.quotes)} quotes, {counted}")
     lines.append("Stages: " + "; ".join(f"{s['n']} {s['name']} {'done' if s['done'] else 'not done'}"

@@ -20,7 +20,6 @@ import re
 from pathlib import Path
 
 from .. import model_choice
-from ..config import settings
 from ..models import Artefact, Job, SourceFile
 from ..providers import router
 from ._gate import ai_allowed, why_not

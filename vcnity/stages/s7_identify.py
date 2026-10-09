@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy.orm import selectinload
+
 from ..config import settings
-from ..models import IdentifyFlag, Job, Pseudonym, Theme
+from ..models import IdentifyFlag, Job, Pseudonym, Theme, ThemeQuote
 from ..providers import router
 from ..redact import redact
 from ..wordlist import person_names
-
-INCLUDED = ("confirmed", "fixed", "added")
+from .s8_report import INCLUDED
 
 SYSTEM = "You check whether text could identify a real person. Answer only from the text."
 PROMPT = (
@@ -31,14 +32,15 @@ PROMPT = (
 
 def uncounted(session, job_id: int) -> list[str]:
     """Signed-off themes the analyst hasn't counted people for yet."""
-    return [t.label for t in session.query(Theme).filter(Theme.job_id == job_id, Theme.status.in_(INCLUDED)).all()
-            if t.people_count is None]
+    return [label for (label,) in session.query(Theme.label).filter(
+        Theme.job_id == job_id, Theme.status.in_(INCLUDED), Theme.people_count.is_(None))]
 
 
 def run(session, job_id: int) -> list[IdentifyFlag]:
     names = person_names(settings.wordlist_path) + [p.real for p in session.query(Pseudonym).filter_by(job_id=job_id)]
     flags: list[IdentifyFlag] = []
-    themes = session.query(Theme).filter(Theme.job_id == job_id, Theme.status.in_(INCLUDED)).all()
+    themes = (session.query(Theme).filter(Theme.job_id == job_id, Theme.status.in_(INCLUDED))
+              .options(selectinload(Theme.quotes).selectinload(ThemeQuote.unit)).all())
     for t in themes:
         # don't duplicate open flags on a re-run
         session.query(IdentifyFlag).filter_by(theme_id=t.id, decision=None).delete(synchronize_session=False)
@@ -64,9 +66,7 @@ def run(session, job_id: int) -> list[IdentifyFlag]:
             why = f"redactor found personal detail in {len(leaked)} quote(s)"
         else:
             raw = router.call(session, job_id=job_id, stage=7, level=t.level, purpose="identifiability-scan",
-                              prompt=PROMPT.format(quotes="\n".join(f"- {q}" for q in
-                                                                    [tq.unit.redacted_text for tq in t.quotes
-                                                                     if not tq.unit.excluded])),
+                              prompt=PROMPT.format(quotes="\n".join(f"- {q}" for q in quotes)),
                               system=SYSTEM, json_mode=True, redacted=True)
             try:
                 data = json.loads(raw)

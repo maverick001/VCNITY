@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy.orm import selectinload
+
 from ..export import report_to_docx
-from ..models import Job, Report, SourceFile, Theme
+from ..models import Job, Report, SourceFile, Theme, ThemeQuote
 from ..providers import router
 from .s0_intake import attendance_total
 
@@ -34,6 +36,7 @@ PROMPT = (
 
 def included_themes(session, job_id: int) -> list[Theme]:
     return (session.query(Theme).filter(Theme.job_id == job_id, Theme.status.in_(INCLUDED))
+            .options(selectinload(Theme.quotes).selectinload(ThemeQuote.unit))
             .order_by(Theme.people_count.desc().nulls_last(), Theme.id).all())
 
 

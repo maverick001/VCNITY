@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import settings
-from ..models import ConsentRecord, Job, SourceFile
+from ..models import Job, SourceFile
 from .s0_intake import sha256_of
 
 # ---------- audio ----------

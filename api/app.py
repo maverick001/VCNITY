@@ -21,12 +21,13 @@ import traceback
 from pathlib import Path
 
 from flask import Flask, g, jsonify, request, send_file
+from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
 from vcnity import ask, audit, auth, db, model_choice, pipeline
 from vcnity.config import settings
 from vcnity.models import (Artefact, Concern, IdentifyFlag, Job, Pseudonym, Report, Segment, SourceFile, Theme,
-                           Unit)
+                           ThemeQuote, Unit)
 from vcnity.stages import (concerns, s0_intake, s2_transcribe, s4_themes, s6_signoff, s7_identify, s8_report,
                            s9_reportback)
 from vcnity.wordlist import load_wordlist, person_names, save_wordlist
@@ -327,9 +328,9 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
     def run_stage(job_id, n):
         opts = request.get_json(silent=True) or {}
         with db.session() as s:  # check gates now so the caller gets the 409, not the thread
-            pipeline._check_gates(s, job_id, n)
             if s.get(Job, job_id) is None:
                 return _err("no such job", 404)
+            pipeline._check_gates(s, job_id, n)
         with _lock:
             r = RUNS.get(job_id)
             if r and r["finished"] is None:
@@ -367,9 +368,12 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
     @app.get("/jobs/<int:job_id>/segments")
     def segments(job_id):
         variant = request.args.get("variant", "with_wordlist")
+        file_id = request.args.get("file_id", type=int)  # one recording; every recording in the job if left out
         with db.session() as s:
-            rows = (s.query(Segment).join(SourceFile).filter(SourceFile.job_id == job_id, Segment.variant == variant)
-                    .order_by(Segment.file_id, Segment.start_s).all())
+            q = s.query(Segment).join(SourceFile).filter(SourceFile.job_id == job_id, Segment.variant == variant)
+            if file_id is not None:
+                q = q.filter(Segment.file_id == file_id)
+            rows = q.order_by(Segment.file_id, Segment.start_s).all()
             return jsonify([_segment(r) for r in rows])
 
     @app.get("/jobs/<int:job_id>/compare/<int:file_id>")
@@ -419,6 +423,7 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
     def themes(job_id):
         with db.session() as s:
             rows = (s.query(Theme).filter(Theme.job_id == job_id, Theme.status != "unsupported")
+                    .options(selectinload(Theme.quotes).selectinload(ThemeQuote.unit))
                     .order_by(Theme.n_people.desc(), Theme.id).all())
             if g.user and g.user["role"] == "facilitator":  # only the themes agreed up front, on the Data Ingestion page
                 rows = [t for t in rows if t.agreed_upfront]

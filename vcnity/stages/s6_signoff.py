@@ -9,6 +9,7 @@ identifiability, with a written reason.
 from __future__ import annotations
 
 from ..models import Job, Review, Theme, ThemeQuote, Unit
+from .s0_intake import attendance_total
 
 COMMUNITY_ACTIONS = {"confirm": "confirmed", "fix": "fixed", "reject": "rejected"}
 
@@ -102,7 +103,7 @@ def set_people_count(session, theme_id: int, count: int, *, actor_role: str) -> 
     count = int(count)
     if count < 0:
         raise ValueError("a count can't be negative")
-    total = sum(int(r.get("count", 0)) for r in (session.get(Job, t.job_id).attendance or []))
+    total = attendance_total(session.get(Job, t.job_id))
     if total and count > total:
         raise ValueError(f"{count} people is more than the {total} who came")
     before = {"people_count": t.people_count}

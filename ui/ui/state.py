@@ -145,12 +145,6 @@ class AppState(rx.State):
     client_report: dict[str, Any] = {}
     reportback: dict[str, Any] = {}
 
-    # concerns (no UI to raise one for now; kept so earlier concerns still load)
-    concerns: list[dict[str, Any]] = []
-    concern_text: str = ""
-    concern_stage: str = "0"
-    concern_open: bool = False
-
     # chat with the data (PRD A19) — kept only until the page reloads
     chat: list[dict[str, Any]] = []
     chat_input: str = ""
@@ -640,9 +634,6 @@ class AppState(rx.State):
                       for f in ((self._api(api.get, f"/jobs/{self.job_id}/flags") or []) if analyst else [])]
         if not facilitator:
             self._load_reports()
-        self.concerns = [{**c, "stage_text": f"stage {c['stage']}",
-                          "routed_text": f"Routed to: {c['routed_to']} · treated as Level {c['level']}" if c["routed_to"] else ""}
-                         for c in ((self._api(api.get, f"/jobs/{self.job_id}/concerns") or []) if staff else [])]
         if self.role == "community":
             previews = {}
             for f in self.files:
@@ -652,8 +643,8 @@ class AppState(rx.State):
             self.file_previews = previews
         if staff and self.audio_files and not self.selected_file_id:
             self.selected_file_id = int(self.audio_files[0]["id"])
-        if staff and self.selected_file_id:
-            self._load_transcript()
+        if staff and self.selected_file_id and self.router.url.path.rstrip("/") == "/transcript":
+            self._load_transcript()  # only the Audio Processing page shows it; the word-list diff is slow
 
     def _load_reports(self):
         reps = self._api(api.get, f"/jobs/{self.job_id}/reports") or []
@@ -692,10 +683,8 @@ class AppState(rx.State):
 
     def _load_transcript(self):
         fid = self.selected_file_id
-        allw = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="with_wordlist") or []
-        allo = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="without") or []
-        mine_with = [s for s in allw if s["file_id"] == fid]
-        mine_without = [s for s in allo if s["file_id"] == fid]
+        mine_with = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="with_wordlist", file_id=fid) or []
+        mine_without = self._api(api.get, f"/jobs/{self.job_id}/segments", variant="without", file_id=fid) or []
         numbers = self._speaker_numbers(mine_with)  # one numbering for both columns, so the labels agree
         self.segments_with = [self._shape_segment(s, numbers) for s in mine_with]
         self.segments_without = [self._shape_segment(s, numbers) for s in mine_without]
@@ -799,15 +788,6 @@ class AppState(rx.State):
 
     def set_flag_reason(self, v: str):
         self.flag_reason = v
-
-    def set_concern_text(self, v: str):
-        self.concern_text = v
-
-    def set_concern_stage(self, v: str):
-        self.concern_stage = v
-
-    def set_concern_open(self, v: bool):
-        self.concern_open = v
 
     # ---------- intake ----------
 
@@ -948,8 +928,7 @@ class AppState(rx.State):
 
     def _names_by_analyst(self) -> bool:
         if self.role != "analyst":
-            self._say("The analyst checks the made-up names, so real names stay off the community page. "
-                      "error")
+            self._say("The analyst checks the made-up names, so real names stay off the community page.", "error")
             return False
         return True
 
@@ -1169,9 +1148,6 @@ class AppState(rx.State):
 
     # ---------- chat with the data ----------
 
-    def set_chat_input(self, v: str):
-        self.chat_input = v
-
     def clear_chat(self):
         self.chat = []
 
@@ -1215,18 +1191,3 @@ class AppState(rx.State):
             self.chat = [*self.chat, reply]
             self.chat_busy = False
         yield rx.scroll_to("chat-end")
-
-    # ---------- concerns ----------
-
-    def raise_concern(self):
-        out = self._api(api.post, f"/jobs/{self.job_id}/concerns",
-                        {"stage": int(self.concern_stage or 0), "text": self.concern_text})
-        if out is not None:
-            self._say("Thank you. A person will read this and sort it.", "ok")
-            self.concern_text = ""
-            self.concern_open = False
-            self.refresh()
-
-    def sort_concern(self, concern_id: int, category: str):
-        if self._api(api.post, f"/concerns/{int(concern_id)}/sort", {"category": category}) is not None:
-            self.refresh()

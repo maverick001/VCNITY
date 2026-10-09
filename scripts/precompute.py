@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from vcnity import db, pipeline  # noqa: E402
 from vcnity.config import settings  # noqa: E402
 from vcnity.models import IdentifyFlag, Job, Report, Review, SourceFile, Theme, Unit  # noqa: E402
-from vcnity.stages import s0_intake, s6_signoff, s7_identify, s8_report  # noqa: E402
+from vcnity.stages import s0_intake, s6_signoff, s7_identify  # noqa: E402
 
 JOB_NAME = "FQI co-design session — September 2026"
 CONSENT = "session-consent-2026-09-03"

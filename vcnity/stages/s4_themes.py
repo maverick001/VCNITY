@@ -321,8 +321,13 @@ def run(session, job_id: int, min_size: int | None = None) -> dict:
             session.add(ThemeQuote(theme_id=agreed[ti].id, unit_id=u.id))
             sorted_n += 1
     session.flush()
+    by_theme: dict[int, list[Unit]] = {t.id: [] for t in agreed}
+    if agreed:
+        for theme_id, unit in (session.query(ThemeQuote.theme_id, Unit).join(Unit, Unit.id == ThemeQuote.unit_id)
+                               .filter(ThemeQuote.theme_id.in_(list(by_theme)))):
+            by_theme[theme_id].append(unit)
     for t in agreed:
-        members = [tq.unit for tq in session.query(ThemeQuote).filter_by(theme_id=t.id).all()]
+        members = by_theme[t.id]
         t.n_people = len({m.speaker_key for m in members})
         t.level = max([t.level] + [m.level for m in members])  # levels only go up
 

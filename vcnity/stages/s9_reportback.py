@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from ..models import Job, Report, Theme
 from ..providers import router
-from .s8_report import INCLUDED, theme_table
+from .s8_report import theme_table
 
 SYSTEM = (
     "You rewrite a community engagement report for the people who took part. "
