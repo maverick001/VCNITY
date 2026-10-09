@@ -1105,7 +1105,8 @@ class AppState(rx.State):
                 name = o.get("display") or o["name"]
                 if o.get("params"):
                     name += f" ({o['params']})"
-                return " · ".join(x for x in (name, o.get("source", ""), f"{o['size_gb']} GB",
+                size = f"{o['size_mb']} MB" if o.get("size_mb") else f"{o['size_gb']} GB"  # speaker models are tiny
+                return " · ".join(x for x in (name, o.get("source", ""), size,
                                               "may not fit in memory" if o["heavy"] else "") if x)
 
             opts = [{**o, "label": label(o)} for o in st["options"]]

@@ -125,9 +125,9 @@ def diarise_models() -> list[dict]:
     cache, out = Path(HF_HUB_CACHE), []
     for name, needs in DIARISE_MODELS.items():
         if all(any((cache / f"models--{repo.replace('/', '--')}").glob(f"snapshots/*/{file}")) for repo, file in needs):
-            size = sum(_folder_gb(cache / f"models--{repo.replace('/', '--')}", 3) for repo in {r for r, _ in needs})
+            size = sum(_folder_gb(cache / f"models--{repo.replace('/', '--')}", 4) for repo in {r for r, _ in needs})
             out.append({"name": name, "display": display_name("diarise", name), "size_gb": round(size, 2),
-                        "source": name.split("/")[0], "params": ""})
+                        "size_mb": round(size * 1000), "source": name.split("/")[0], "params": ""})
     return out
 
 
