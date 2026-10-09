@@ -632,7 +632,7 @@ def transcript_page() -> rx.Component:
             rx.text("Recording:"),
             rx.select(AppState.audio_labels, value=AppState.selected_audio_label, on_change=AppState.select_clip,
                       width="130px"),
-            rerun_button(2), align="center"),
+            rerun_button(2, "Re-run"), align="center"),
         rx.cond(AppState.speakers_missing,
                 rx.callout("Speakers not identified for this recording, so every line shows \"Unknown\" instead of who "
                            "spoke. The analyst can re-run stage 2 to try again.",
