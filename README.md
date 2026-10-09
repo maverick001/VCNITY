@@ -32,7 +32,7 @@ Once app is installed and running on your local PC, open http://127.0.0.1:3000 i
 
 On the sign-in page, every user can sign in with an account as facilitator, analyst, community member or council member.
 
-![The sign-in page: username and password, then straight to your own page](images/auth.jpg)
+![The sign-in page: username and password, then straight to your own page](static/images/auth.jpg)
 
 ## Authentication
 
@@ -49,7 +49,7 @@ There are 4 types of user who use this platform.  Their user names and roles are
 
 ### Data Analyst Panel
 
-![The prototype's Data Ingestion page — every file gets a consent record and a sensitivity level before anything runs on it](images/index_page.jpg)
+![The prototype's Data Ingestion page — every file gets a consent record and a sensitivity level before anything runs on it](static/images/index_page.jpg)
 
 After signing in, you will land on to your own panel page. The agent workflow on the left sidebar demostrates how the app works. The green tick means that stage has output, and an amber person icon means it's pending human input. A **facilitator** can upload raw data files and input complementary information on the Facilitator panel. An analyst can run a single stage with **Run** on the **Agent Workflow** page, or use the **Reset job** button to rerun the whole workflow.
 
@@ -72,7 +72,7 @@ Run workflow step by step:
 
 **2. Model Configuration** (in Analyst Panel only). Here the analyst picks the local model each step uses for the current job.
 
-![The Model Configuration page: each step has its own model pick, and Audio Processing has separate Speech-to-Text and Speaker Diarization picks](images/model_configuration.png)
+![The Model Configuration page: each step has its own model pick, and Audio Processing has separate Speech-to-Text and Speaker Diarization picks](static/images/model_configuration.png)
 
 Audio processing has two options: **Speech-to-Text** (Whisper, which writes the words) and **Speaker Diarization** (works out which voice is which, and doesn't change the words). Each model shows its parameter count, where it came from and its size on disk, e.g. `faster-whisper-large-v3 (1.55B) · Systran · 3.1 GB`. Only models already on this laptop are listed — speech models in `~/.vcnity/cache/models`, speaker models in the Hugging Face cache, text and vision models from Ollama. The selected model applies to that job only; anything a step has already made stays until you re-run it. Without a pick, a step uses the defaults in `.env`. Nobody else sees the page or which models are in use.
 
