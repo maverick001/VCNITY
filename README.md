@@ -72,7 +72,7 @@ Run workflow step by step:
 
 **2. Model Configuration** (in Analyst Panel only). Here the analyst picks the local model each step uses for the current job.
 
-![The Model Configuration page: each step has its own model pick, and Audio Processing has separate Speech-to-Text and Speaker Diarization picks](static/images/model_configuration.png)
+![The Model Configuration page: each step has its own model pick, and Audio Processing has separate Speech-to-Text and Speaker Diarization picks](static/images/model_configuration.jpg)
 
 Audio processing has two options: **Speech-to-Text** (Whisper, which writes the words) and **Speaker Diarization** (works out which voice is which, and doesn't change the words). Each model shows its parameter count, where it came from and its size on disk, e.g. `faster-whisper-large-v3 (1.55B) · Systran · 3.1 GB`. Only models already on this laptop are listed — speech models in `~/.vcnity/cache/models`, speaker models in the Hugging Face cache, text and vision models from Ollama. The selected model applies to that job only; anything a step has already made stays until you re-run it. Without a pick, a step uses the defaults in `.env`. Nobody else sees the page or which models are in use.
 
