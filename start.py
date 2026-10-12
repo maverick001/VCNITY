@@ -2,12 +2,14 @@
 
     python app/start.py            # sync deps, start Postgres + API + UI
     python app/start.py --api-only # just the Flask API (useful with precompute)
+    python app/start.py --sync     # force the dependency sync even if uv.lock hasn't changed
 
 Works on Windows 11 and macOS. Keeps the venv and the Reflex build out of the
 Google Drive folder by pointing uv and Reflex at ~/.vcnity.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import signal
@@ -20,6 +22,28 @@ APP = Path(__file__).resolve().parent
 HOME = Path(os.environ.get("VCNITY_HOME", Path.home() / ".vcnity"))
 VENV = HOME / "venv"
 WEB = HOME / "web"
+SYNC_STAMP = HOME / "sync.stamp"
+
+
+def _deps_fingerprint() -> str:
+    """Changes when the lock file or the project file does, i.e. when a sync could have something to do."""
+    h = hashlib.sha256()
+    for name in ("uv.lock", "pyproject.toml"):
+        h.update((APP / name).read_bytes())
+    return h.hexdigest()
+
+
+def _venv_python() -> Path:
+    return VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def _needs_sync(force: bool) -> bool:
+    if force or not _venv_python().exists():
+        return True
+    try:
+        return SYNC_STAMP.read_text(encoding="utf-8").strip() != _deps_fingerprint()
+    except OSError:
+        return True
 
 
 def main() -> int:
@@ -45,19 +69,23 @@ def main() -> int:
     env.setdefault("VCNITY_HOME", str(HOME))
     env.setdefault("PYTHONIOENCODING", "utf-8")
 
-    print(f"[start] syncing dependencies into {VENV} (first run downloads ~2 GB)")
-    subprocess.run(["uv", "sync", "--project", str(APP), "--extra", "dev"], env=env, check=True)
+    if _needs_sync("--sync" in sys.argv):
+        print(f"[start] syncing dependencies into {VENV} (first run downloads ~2 GB)")
+        subprocess.run(["uv", "sync", "--project", str(APP), "--extra", "dev"], env=env, check=True)
+        SYNC_STAMP.write_text(_deps_fingerprint(), encoding="utf-8")
+    else:
+        print("[start] dependencies unchanged since the last sync, skipping (--sync forces it)")
 
     procs: list[subprocess.Popen] = []
     try:
         print("[start] API  → http://127.0.0.1:%s" % env.get("VCNITY_API_PORT", "8100"))
         procs.append(subprocess.Popen(
-            ["uv", "run", "--project", str(APP), "python", "-m", "api.app"], cwd=APP, env=env))
+            ["uv", "run", "--no-sync", "--project", str(APP), "python", "-m", "api.app"], cwd=APP, env=env))
         if not api_only:
-            time.sleep(3)
+            # No wait for the API: the front end's compile takes far longer, and it only calls the API when a page is opened.
             print("[start] UI   → http://localhost:3000  (first run compiles the front end; give it a minute)")
             procs.append(subprocess.Popen(
-                ["uv", "run", "--project", str(APP), "reflex", "run"], cwd=APP / "ui", env=env))
+                ["uv", "run", "--no-sync", "--project", str(APP), "reflex", "run"], cwd=APP / "ui", env=env))
         print("[start] Ctrl-C stops everything.")
         while all(p.poll() is None for p in procs):
             time.sleep(1)

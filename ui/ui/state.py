@@ -696,7 +696,7 @@ class AppState(rx.State):
         """Called by the pipeline page while a stage runs."""
         if not self.job_id:
             return
-        st = self._api(api.get, f"/jobs/{self.job_id}/status") or {}
+        st = self._api(api.get, f"/jobs/{self.job_id}/run") or {}
         self.run = st.get("run") or {}
         was_running = self.running
         self.running = bool(self.run) and self.run.get("finished") is None
@@ -1159,7 +1159,17 @@ class AppState(rx.State):
             self.job_id = int(q["job"])
         # A backend reload drops a question in flight; don't leave the box locked for good.
         self.chat_busy = False
-        return AppState.load_all
+        if not self.job_id:
+            return AppState.load_all  # no job in the link: pick the latest, as the other pages do
+        # The chat only shows who you are and the job's name, so skip the full refresh the stage pages need.
+        self.message = ""
+        go = self._route_for_role()
+        if not self.role:
+            return go
+        j = self._api(api.get, f"/jobs/{self.job_id}")
+        if j is not None:
+            self.job = j
+        return go
 
     def submit_question(self, form_data: dict):
         self.chat_input = form_data.get("question", "")

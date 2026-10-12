@@ -44,7 +44,7 @@ PERMISSIONS: dict[str, tuple[str, ...]] = {
     "create_job": (F,), "set_attendance": (F,), "upload": (F,), "add_local": (F,),
     "add_agreed_theme": (C,), "confirm": (C,), "add_theme": (C,), "set_level": (F, A),
     "preview": (F, C, A), "media": (F, C, A), "get_wordlist": (F, C, A), "put_wordlist": (F, C, A),
-    "status": STAFF, "segments": STAFF,
+    "status": STAFF, "run_state": STAFF, "segments": STAFF,
     # Running the pipeline is analyst work; the facilitator uploads, sets levels and enters attendance (PRD §3).
     "run_stage": (A,), "reset_job": (A,), "compare": (A,), "compare_with_reference": (A,),
     "unsupported": (A,), "names": (A,), "flags": (A,),
@@ -362,6 +362,12 @@ def create_app(testing: bool = False, auth_on: bool | None = None) -> Flask:
             keep = ("job_id", "name", "files", "segments", "waiting_level2", "attendance_total", "run")
             st = {**{k: st[k] for k in keep}, "stages": [x for x in st["stages"] if x["n"] in FACILITATOR_STAGES]}
         return jsonify(st)
+
+    @app.get("/jobs/<int:job_id>/run")
+    def run_state(job_id):
+        """Just the running stage, for the page that polls every few seconds: no database work at all."""
+        with _lock:
+            return jsonify({"run": RUNS.get(job_id)})
 
     # ---- stage views ----
 

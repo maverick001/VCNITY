@@ -139,3 +139,16 @@ def test_facilitator_sees_only_stages_1_and_2(client):
     # Themes: only the ones agreed up front, which the Data Ingestion page lists.
     assert [t["label"] for t in client.get(f"/jobs/{job}/themes", headers=fac).get_json()] == ["agreed"]
     assert {t["label"] for t in client.get(f"/jobs/{job}/themes", headers=ana).get_json()} == {"agreed", "drafted"}
+
+
+def test_run_state_is_staff_only_and_matches_status(client):
+    ids = _users([("fac7", "facilitator", None), ("ana7", "analyst", None), ("com7", "community", 0)])
+    job = ids[0]
+    fac, ana, com = _sign_in(client, "fac7"), _sign_in(client, "ana7"), _sign_in(client, "com7")
+
+    assert client.get(f"/jobs/{job}/run").status_code == 401
+    assert client.get(f"/jobs/{job}/run", headers=com).status_code == 403
+    for headers in (fac, ana):
+        r = client.get(f"/jobs/{job}/run", headers=headers)
+        assert r.status_code == 200
+        assert r.get_json() == {"run": client.get(f"/jobs/{job}/status", headers=headers).get_json()["run"]}

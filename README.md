@@ -24,6 +24,7 @@ git clone https://github.com/maverick001/VCNITY.git
 cd VCNITY
 cp .env.example .env    # configure your Hugging Face Token here
 python start.py         # installs Python dependencies, starts the database, API, and UI
+                        # (later starts skip the install unless uv.lock changed; add --sync to force it)
 ```
 
 The first-time running of the app will download about 1 GB of Python libraries, plus 3 GB of speech-recognition models and a small multilingual embedding model (for grouping raw data into draft themes). The model files will be saved to your local dir `~/.vcnity/`.
