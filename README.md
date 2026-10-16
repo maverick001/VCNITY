@@ -7,7 +7,7 @@ This is a prototype application of GenAI-assisted agentic workflow that automate
 You'll need:
 
 1. [uv](https://docs.astral.sh/uv/) installed and on your PATH.
-2. [Ollama](https://ollama.com) is installed and running, with the two models below pulled. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
+2. [Ollama](https://ollama.com) is installed, with the two models below pulled. On Windows, `start.py` starts it in the background if it isn't already running. If your machine has 16GB RAM and no GPU, that's fine — the app never loads both models at once.
 3. To process audio files, a free HuggingFace token needs to be configured. You need to add your token `HF_TOKEN=hf_…` to `.env`. Without it, the transcription can still work, but without speaker labels to separate them. The speaker models are downloaded once with this token, then run fully on your PC.
 
 Pull these two open-source Qwen models from Ollama:

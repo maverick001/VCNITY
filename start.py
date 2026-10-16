@@ -4,6 +4,7 @@
     python app/start.py --api-only # just the Flask API (useful with precompute)
     python app/start.py --sync     # force the dependency sync even if uv.lock hasn't changed
 
+On Windows 11 it also starts `ollama serve` in the background if Ollama isn't running.
 Works on Windows 11 and macOS. Keeps the venv and the Reflex build out of the
 Google Drive folder by pointing uv and Reflex at ~/.vcnity.
 """
@@ -46,6 +47,43 @@ def _needs_sync(force: bool) -> bool:
         return True
 
 
+def _ollama_running() -> bool:
+    """True if an ollama.exe (the server, not the tray app 'ollama app.exe') is in the Windows process list."""
+    try:
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq ollama.exe", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "ollama.exe" in out.lower()
+
+
+def _ensure_ollama() -> None:
+    """On Windows, start `ollama serve` hidden and detached if Ollama isn't running. Never stops the launch."""
+    if os.name != "nt":
+        return
+    if _ollama_running():
+        print("[start] Ollama is already running")
+        return
+    if shutil.which("ollama") is None:
+        print("[start] WARNING: Ollama is not running and 'ollama' is not on PATH. Install it from https://ollama.com "
+              "— the AI steps will fail until it is running.")
+        return
+    try:
+        # DETACHED_PROCESS + CREATE_NO_WINDOW: no console window, and it keeps running after this launcher stops.
+        subprocess.Popen(["ollama", "serve"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, close_fds=True,
+                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
+    except OSError as e:
+        print(f"[start] WARNING: could not start Ollama ({e}). Start it yourself with 'ollama serve'.")
+        return
+    for _ in range(10):
+        time.sleep(0.5)
+        if _ollama_running():
+            print("[start] Ollama was not running, started 'ollama serve' in the background")
+            return
+    print("[start] WARNING: sent 'ollama serve' but ollama.exe isn't showing up yet. Check it with 'ollama list'.")
+
+
 def main() -> int:
     # A Windows console defaults to a codepage (e.g. cp1252) that can't encode
     # the arrows/dashes this script prints, crashing on the first such print.
@@ -63,6 +101,7 @@ def main() -> int:
         return 1
 
     HOME.mkdir(parents=True, exist_ok=True)
+    _ensure_ollama()
     env = dict(os.environ)
     env["UV_PROJECT_ENVIRONMENT"] = str(VENV)
     env["REFLEX_WEB_WORKDIR"] = str(WEB)
